@@ -18,6 +18,8 @@ export const DEFAULT_PREFERENCES: StoredPreferences = {
     scrollSyncEnabled: true
 };
 
+const blobImageMarkdownPattern = /^!\[[^\]\n]*\]\(blob:[^)\n]+\)\n*/gm;
+
 function canUseStorage(storage: Storage | undefined): storage is Storage {
     return typeof storage !== 'undefined';
 }
@@ -37,7 +39,7 @@ export function saveMarkdownDraft(storage: Storage | undefined, draft: string) {
     if (!canUseStorage(storage)) return false;
 
     try {
-        storage.setItem(MARKDOWN_DRAFT_STORAGE_KEY, draft);
+        storage.setItem(MARKDOWN_DRAFT_STORAGE_KEY, draft.replace(blobImageMarkdownPattern, '').trimEnd());
         return true;
     } catch {
         return false;

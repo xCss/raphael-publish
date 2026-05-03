@@ -25,6 +25,21 @@ describe('local draft persistence', () => {
         expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('# 草稿');
     });
 
+    test('does not persist non-restorable blob image references', () => {
+        localStorage.clear();
+
+        const draft = [
+            '# 草稿',
+            '',
+            '![本地截图](blob:http://localhost/pasted-image)',
+            '',
+            '![远程图片](https://example.com/image.png)'
+        ].join('\n');
+
+        expect(saveMarkdownDraft(localStorage, draft)).toBe(true);
+        expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('# 草稿\n\n![远程图片](https://example.com/image.png)');
+    });
+
     test('normalizes incomplete or invalid preferences', () => {
         expect(
             normalizePreferences({
