@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { insertAtSelection } from './htmlToMarkdown';
+import { handleSmartPaste, insertAtSelection } from './htmlToMarkdown';
 
 describe('insertAtSelection', () => {
     beforeEach(() => {
@@ -49,5 +49,52 @@ describe('insertAtSelection', () => {
 
         expect(textarea.selectionStart).toBe('hello Raphael'.length);
         expect(textarea.selectionEnd).toBe('hello Raphael'.length);
+    });
+});
+
+describe('handleSmartPaste image files', () => {
+    beforeEach(() => {
+        vi.stubGlobal('URL', {
+            ...URL,
+            createObjectURL: vi.fn(() => 'blob:http://localhost/pasted-image')
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        document.body.innerHTML = '';
+    });
+
+    it('inserts blob object URLs instead of base64 data URLs for clipboard image files', () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = '';
+        document.body.appendChild(textarea);
+
+        let nextValue = '';
+        const imageFile = new File(['image-bytes'], 'paste.png', { type: 'image/png' });
+        const event = {
+            preventDefault: vi.fn(),
+            currentTarget: textarea,
+            clipboardData: {
+                getData: vi.fn(() => ''),
+                items: [
+                    {
+                        kind: 'file',
+                        type: 'image/png',
+                        getAsFile: () => imageFile
+                    }
+                ],
+                files: []
+            }
+        } as unknown as React.ClipboardEvent<HTMLTextAreaElement>;
+
+        handleSmartPaste(event, (value) => {
+            nextValue = value;
+        });
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(URL.createObjectURL).toHaveBeenCalledWith(imageFile);
+        expect(nextValue).toBe('![图片](blob:http://localhost/pasted-image)');
+        expect(nextValue).not.toContain('data:image');
     });
 });
