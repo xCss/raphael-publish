@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const enableDevServiceWorker = process.env.VITE_PWA_DEV === 'true'
+
 // https://vitejs.dev/config/
 export default defineConfig({
     plugins: [
@@ -44,7 +46,7 @@ export default defineConfig({
                 navigateFallback: 'index.html'
             },
             devOptions: {
-                enabled: true
+                enabled: enableDevServiceWorker
             }
         })
     ],
