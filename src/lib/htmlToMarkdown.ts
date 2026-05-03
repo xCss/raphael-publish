@@ -103,6 +103,11 @@ function revokeBlobImageUrls(markdown: string): void {
     }
 }
 
+export interface SmartPasteOptions {
+    persistImages?: boolean;
+    persistImage?: (file: File, index: number) => string | Promise<string>;
+}
+
 export function insertAtSelection(
     textarea: HTMLTextAreaElement,
     insertedText: string,
@@ -123,8 +128,9 @@ export function insertAtSelection(
 
 export function handleSmartPaste(
     e: React.ClipboardEvent<HTMLTextAreaElement>,
-    setMarkdownInput: (val: string) => void
-): void {
+    setMarkdownInput: (val: string) => void,
+    options: SmartPasteOptions = {}
+): void | Promise<void> {
     const clipboardData = e.clipboardData;
     if (!clipboardData) return;
 
@@ -137,16 +143,34 @@ export function handleSmartPaste(
         const textarea = e.currentTarget;
         const replacedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
 
-        try {
-            const objectUrls = imageFiles.map(fileToObjectUrl);
-            const markdownImages = objectUrls
-                .filter(Boolean)
-                .map((src, index) => `![图片${objectUrls.length > 1 ? ` ${index + 1}` : ''}](${src})`)
-                .join('\n\n');
+        const buildMarkdownImages = (sources: string[]) => sources
+            .filter(Boolean)
+            .map((src, index) => `![图片${sources.length > 1 ? ` ${index + 1}` : ''}](${src})`)
+            .join('\n\n');
 
+        const insertObjectUrlImages = () => {
+            const objectUrls = imageFiles.map(fileToObjectUrl);
+            const markdownImages = buildMarkdownImages(objectUrls);
             if (!markdownImages) return;
             revokeBlobImageUrls(replacedText);
             insertAtSelection(textarea, markdownImages, setMarkdownInput);
+        };
+
+        try {
+            if (options.persistImage && options.persistImages !== false) {
+                return Promise.all(imageFiles.map((file, index) => options.persistImage!(file, index)))
+                    .then((sources) => {
+                        const markdownImages = buildMarkdownImages(sources);
+                        if (!markdownImages) return;
+                        insertAtSelection(textarea, markdownImages, setMarkdownInput);
+                    })
+                    .catch((err: unknown) => {
+                        console.warn('Persistent image storage failed, falling back to session-only preview:', err);
+                        insertObjectUrlImages();
+                    });
+            }
+
+            insertObjectUrlImages();
         } catch (err) {
             console.error('Clipboard image conversion failed:', err);
             alert('粘贴图片失败，请重试');

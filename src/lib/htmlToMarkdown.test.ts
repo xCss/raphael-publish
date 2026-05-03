@@ -129,4 +129,41 @@ describe('handleSmartPaste image files', () => {
 
         expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/old-image');
     });
+
+    it('inserts durable image references when a persistent image handler is provided', async () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = '';
+        document.body.appendChild(textarea);
+
+        let nextValue = '';
+        const imageFile = new File(['image-bytes'], 'paste.png', { type: 'image/png' });
+        const event = {
+            preventDefault: vi.fn(),
+            currentTarget: textarea,
+            clipboardData: {
+                getData: vi.fn(() => ''),
+                items: [
+                    {
+                        kind: 'file',
+                        type: 'image/png',
+                        getAsFile: () => imageFile
+                    }
+                ],
+                files: []
+            }
+        } as unknown as React.ClipboardEvent<HTMLTextAreaElement>;
+
+        await handleSmartPaste(event, (value) => {
+            nextValue = value;
+        }, {
+            persistImage: async (file) => {
+                expect(file).toBe(imageFile);
+                return 'raphael-image://draft/default/pasted-image-1';
+            }
+        });
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(URL.createObjectURL).not.toHaveBeenCalled();
+        expect(nextValue).toBe('![图片](raphael-image://draft/default/pasted-image-1)');
+    });
 });
