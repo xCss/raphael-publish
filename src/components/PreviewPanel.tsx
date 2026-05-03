@@ -75,7 +75,7 @@ export default function PreviewPanel({
 
                 // Use getAttribute('src') to preserve original path (e.g., "./images/photo.png")
                 // img.src returns resolved absolute URL, which won't match markdown text
-                const originalSrc = img.getAttribute('src') || img.src;
+                const originalSrc = img.getAttribute('data-original-src') || img.getAttribute('src') || img.src;
 
                 clickInfo.src = originalSrc;
                 clickInfo.alt = img.alt || img.getAttribute('alt') || '';

@@ -40,6 +40,17 @@ describe('findImagePosition', () => {
         expect(result?.alt).toBe('data URL 图片');
     });
 
+    test('找到持久化本地图片引用', () => {
+        const reference = 'raphael-image://draft/default/pasted-image-1';
+        const text = `![本地截图](${reference})`;
+
+        const result = findImagePosition(text, reference, '本地截图');
+
+        expect(result).not.toBeNull();
+        expect(result?.src).toBe(reference);
+        expect(result?.alt).toBe('本地截图');
+    });
+
     test('只通过 src 找到图片', () => {
         const result = findImagePosition(markdownText, 'https://example.com/image.jpg', '错误的alt');
         expect(result).not.toBeNull();
