@@ -1,12 +1,13 @@
-import { Moon, Sun, Github } from 'lucide-react';
+import { Moon, Sun, Github, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface HeaderProps {
     themeMode: 'light' | 'dark';
     onToggleTheme: () => void;
+    onOpenSettings: () => void;
 }
 
-export default function Header({ themeMode, onToggleTheme }: HeaderProps) {
+export default function Header({ themeMode, onToggleTheme, onOpenSettings }: HeaderProps) {
     return (
         <header className="glass flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 sticky top-0 z-[100]">
             <div className="flex items-center gap-3">
@@ -31,6 +32,16 @@ export default function Header({ themeMode, onToggleTheme }: HeaderProps) {
                 >
                     <Github size={20} />
                 </motion.a>
+                <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={onOpenSettings}
+                    data-testid="settings-button"
+                    aria-label="打开设置"
+                    className="p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                >
+                    <Settings size={20} />
+                </motion.button>
                 <motion.button
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}

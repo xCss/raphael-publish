@@ -121,6 +121,42 @@ test('restores the local markdown draft after reload', async ({ page }) => {
     await expect(page.getByTestId('editor-input')).toHaveValue('# 本地草稿\n\n断网也应该继续保留。');
 });
 
+test('opens settings without replacing the split editor and preview workspace', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+
+    const panel = page.getByTestId('settings-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute('data-variant', 'desktop-drawer');
+    await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
+    await expect(page.getByText('Appearance')).toBeVisible();
+    await expect(page.getByText('Drafts & Images')).toBeVisible();
+    await expect(page.getByText('AI Writing')).toBeVisible();
+    await expect(page.getByText('Quality Checks')).toBeVisible();
+    await expect(page.getByTestId('editor-input')).toBeVisible();
+    await expect(page.getByTestId('preview-content')).toBeVisible();
+
+    await page.getByTestId('settings-close').click();
+    await expect(panel).toBeHidden();
+});
+
+test('opens settings as a mobile sheet', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+
+    const panel = page.getByTestId('settings-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveAttribute('data-variant', 'mobile-sheet');
+    await expect(page.getByText('AI Writing')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+});
+
 for (const device of [
     { testId: 'device-mobile', label: 'mobile' },
     { testId: 'device-tablet', label: 'tablet' }

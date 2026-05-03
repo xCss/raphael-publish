@@ -13,6 +13,7 @@ import ThemeSelector from './components/ThemeSelector';
 import Toolbar from './components/Toolbar';
 import EditorPanel from './components/EditorPanel';
 import PreviewPanel from './components/PreviewPanel';
+import SettingsPanel from './components/SettingsPanel';
 import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
     const [activePanel, setActivePanel] = useState<'editor' | 'preview'>('editor');
     const [scrollSyncEnabled, setScrollSyncEnabled] = useState(preferences.scrollSyncEnabled);
     const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const previewRef = useRef<HTMLDivElement>(null);
     const editorScrollRef = useRef<HTMLTextAreaElement>(null);
     const previewOuterScrollRef = useRef<HTMLDivElement>(null);
@@ -288,9 +290,11 @@ export default function App() {
     return (
         <div className="flex flex-col h-screen overflow-hidden antialiased bg-[#fbfbfd] dark:bg-black transition-colors duration-300">
 
-            <Header themeMode={themeMode} onToggleTheme={toggleTheme} />
+            <Header themeMode={themeMode} onToggleTheme={toggleTheme} onOpenSettings={() => setIsSettingsOpen(true)} />
 
             <PwaStatus isOnline={isOnline} />
+
+            <SettingsPanel open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
             {/* 移动端 Tab 切换 */}
             <div className="md:hidden glass-toolbar flex items-center z-[90]">
