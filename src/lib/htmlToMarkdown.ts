@@ -93,6 +93,16 @@ function fileToObjectUrl(file: File): string {
     return URL.createObjectURL(file);
 }
 
+function getBlobImageUrls(markdown: string): string[] {
+    return Array.from(markdown.matchAll(/!\[[^\]\n]*\]\((blob:[^)\n]+)\)/g), (match) => match[1]);
+}
+
+function revokeBlobImageUrls(markdown: string): void {
+    for (const src of getBlobImageUrls(markdown)) {
+        URL.revokeObjectURL(src);
+    }
+}
+
 export function insertAtSelection(
     textarea: HTMLTextAreaElement,
     insertedText: string,
@@ -125,6 +135,7 @@ export function handleSmartPaste(
     if (imageFiles.length > 0) {
         e.preventDefault();
         const textarea = e.currentTarget;
+        const replacedText = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
 
         try {
             const objectUrls = imageFiles.map(fileToObjectUrl);
@@ -134,6 +145,7 @@ export function handleSmartPaste(
                 .join('\n\n');
 
             if (!markdownImages) return;
+            revokeBlobImageUrls(replacedText);
             insertAtSelection(textarea, markdownImages, setMarkdownInput);
         } catch (err) {
             console.error('Clipboard image conversion failed:', err);

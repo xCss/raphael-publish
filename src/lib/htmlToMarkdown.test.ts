@@ -56,7 +56,8 @@ describe('handleSmartPaste image files', () => {
     beforeEach(() => {
         vi.stubGlobal('URL', {
             ...URL,
-            createObjectURL: vi.fn(() => 'blob:http://localhost/pasted-image')
+            createObjectURL: vi.fn(() => 'blob:http://localhost/pasted-image'),
+            revokeObjectURL: vi.fn()
         });
     });
 
@@ -96,5 +97,36 @@ describe('handleSmartPaste image files', () => {
         expect(URL.createObjectURL).toHaveBeenCalledWith(imageFile);
         expect(nextValue).toBe('![图片](blob:http://localhost/pasted-image)');
         expect(nextValue).not.toContain('data:image');
+    });
+
+    it('revokes the previous pasted image URL after a replacement paste', () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = '![旧截图](blob:http://localhost/old-image)';
+        textarea.selectionStart = 0;
+        textarea.selectionEnd = textarea.value.length;
+        document.body.appendChild(textarea);
+
+        const imageFile = new File(['image-bytes'], 'paste.png', { type: 'image/png' });
+        const event = {
+            preventDefault: vi.fn(),
+            currentTarget: textarea,
+            clipboardData: {
+                getData: vi.fn(() => ''),
+                items: [
+                    {
+                        kind: 'file',
+                        type: 'image/png',
+                        getAsFile: () => imageFile
+                    }
+                ],
+                files: []
+            }
+        } as unknown as React.ClipboardEvent<HTMLTextAreaElement>;
+
+        handleSmartPaste(event, (value) => {
+            textarea.value = value;
+        });
+
+        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:http://localhost/old-image');
     });
 });
