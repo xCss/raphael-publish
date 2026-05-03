@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { PenLine, Eye } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
 import { md, preprocessMarkdown, applyTheme } from './lib/markdown';
 import { markElementIndexes } from './lib/markdownIndexer';
 import { makeWeChatCompatible, cleanInternalAttributes } from './lib/wechatCompat';
@@ -9,21 +8,28 @@ import { defaultContent } from './defaultContent';
 import { findImagePosition, selectTextAreaRange } from './lib/imageSelector';
 import { findElementPosition, type ElementLocation } from './lib/markdownLocator';
 import Header from './components/Header';
+import PwaStatus from './components/PwaStatus';
 import ThemeSelector from './components/ThemeSelector';
 import Toolbar from './components/Toolbar';
 import EditorPanel from './components/EditorPanel';
 import PreviewPanel from './components/PreviewPanel';
+import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
 
 export default function App() {
-    const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
-    const [markdownInput, setMarkdownInput] = useState<string>(defaultContent);
+    const [preferences] = useState(() => loadPreferences(typeof window === 'undefined' ? undefined : window.localStorage, {
+        ...DEFAULT_PREFERENCES,
+        activeTheme: THEMES[0].id
+    }));
+    const [themeMode, setThemeMode] = useState<'light' | 'dark'>(preferences.themeMode);
+    const [markdownInput, setMarkdownInput] = useState<string>(() => loadMarkdownDraft(typeof window === 'undefined' ? undefined : window.localStorage, defaultContent));
     const [renderedHtml, setRenderedHtml] = useState<string>('');
-    const [activeTheme, setActiveTheme] = useState(THEMES[0].id);
+    const [activeTheme, setActiveTheme] = useState(preferences.activeTheme);
     const [copied, setCopied] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
-    const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'pc'>('pc');
+    const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'pc'>(preferences.previewDevice);
     const [activePanel, setActivePanel] = useState<'editor' | 'preview'>('editor');
-    const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
+    const [scrollSyncEnabled, setScrollSyncEnabled] = useState(preferences.scrollSyncEnabled);
+    const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
     const previewRef = useRef<HTMLDivElement>(null);
     const editorScrollRef = useRef<HTMLTextAreaElement>(null);
     const previewOuterScrollRef = useRef<HTMLDivElement>(null);
@@ -32,15 +38,42 @@ export default function App() {
     const scrollLockReleaseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        // Enforce light mode as default, do not follow system preferences
+        document.documentElement.classList.toggle('dark', themeMode === 'dark');
+    }, [themeMode]);
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            saveMarkdownDraft(window.localStorage, markdownInput);
+        }, 300);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [markdownInput]);
+
+    useEffect(() => {
+        savePreferences(window.localStorage, {
+            themeMode,
+            activeTheme,
+            previewDevice,
+            scrollSyncEnabled
+        });
+    }, [themeMode, activeTheme, previewDevice, scrollSyncEnabled]);
+
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
     }, []);
 
     const toggleTheme = () => {
         setThemeMode((prev) => {
-            const next = prev === 'light' ? 'dark' : 'light';
-            if (next === 'dark') document.documentElement.classList.add('dark');
-            else document.documentElement.classList.remove('dark');
-            return next;
+            return prev === 'light' ? 'dark' : 'light';
         });
     };
 
@@ -178,8 +211,9 @@ export default function App() {
         URL.revokeObjectURL(url);
     };
 
-    const handleExportPdf = () => {
+    const handleExportPdf = async () => {
         if (!previewRef.current) return;
+        const { default: html2pdf } = await import('html2pdf.js');
         const element = previewRef.current;
         const opt = {
             margin: 10,
@@ -255,6 +289,8 @@ export default function App() {
         <div className="flex flex-col h-screen overflow-hidden antialiased bg-[#fbfbfd] dark:bg-black transition-colors duration-300">
 
             <Header themeMode={themeMode} onToggleTheme={toggleTheme} />
+
+            <PwaStatus isOnline={isOnline} />
 
             {/* 移动端 Tab 切换 */}
             <div className="md:hidden glass-toolbar flex items-center z-[90]">

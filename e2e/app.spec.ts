@@ -105,6 +105,22 @@ test('renders bold text with punctuation without leaking markdown markers', asyn
     await expect(preview).toContainText('2025年初，伦敦黄金市场的一个月拆借利率一度升至5%。');
 });
 
+test('restores the local markdown draft after reload', async ({ page }) => {
+    await page.goto('/');
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('# 本地草稿\n\n断网也应该继续保留。');
+    await expect
+        .poll(() => page.evaluate(() => localStorage.getItem('raphael-publish:markdown-draft:v1')), {
+            timeout: 2000,
+            intervals: [100, 150, 250]
+        })
+        .toBe('# 本地草稿\n\n断网也应该继续保留。');
+
+    await page.reload();
+    await expect(page.getByTestId('editor-input')).toHaveValue('# 本地草稿\n\n断网也应该继续保留。');
+});
+
 for (const device of [
     { testId: 'device-mobile', label: 'mobile' },
     { testId: 'device-tablet', label: 'tablet' }
