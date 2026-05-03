@@ -2,8 +2,10 @@
 *.bak*
 node_modules/
 dist/
+dev-dist/
 playwright-report/
 test-results/
+.codex*
 *.tsbuildinfo
 *.log
 .idea/
