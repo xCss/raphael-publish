@@ -40,18 +40,45 @@ describe('local draft persistence', () => {
         expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('# 草稿\n\n![远程图片](https://example.com/image.png)');
     });
 
+    test('keeps durable local image references when saving drafts', () => {
+        localStorage.clear();
+
+        const draft = [
+            '# 草稿',
+            '',
+            '![本地截图](raphael-image://draft/default/pasted-image-1)',
+            '',
+            '![临时截图](blob:http://localhost/pasted-image)'
+        ].join('\n');
+
+        expect(saveMarkdownDraft(localStorage, draft)).toBe(true);
+        expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-image-1)');
+    });
+
     test('normalizes incomplete or invalid preferences', () => {
         expect(
             normalizePreferences({
                 themeMode: 'dark',
                 activeTheme: '',
                 previewDevice: 'watch',
-                scrollSyncEnabled: false
+                scrollSyncEnabled: false,
+                persistPastedImages: true,
+                aiWriting: {
+                    baseUrl: 'https://api.example.com/v1',
+                    apiKey: 42,
+                    model: 'gpt-4o-mini'
+                }
             })
         ).toEqual({
             ...DEFAULT_PREFERENCES,
             themeMode: 'dark',
-            scrollSyncEnabled: false
+            scrollSyncEnabled: false,
+            persistPastedImages: true,
+            aiWriting: {
+                baseUrl: 'https://api.example.com/v1',
+                apiKey: '',
+                model: 'gpt-4o-mini'
+            }
         });
     });
 
@@ -61,7 +88,13 @@ describe('local draft persistence', () => {
             themeMode: 'dark' as const,
             activeTheme: 'github',
             previewDevice: 'mobile' as const,
-            scrollSyncEnabled: false
+            scrollSyncEnabled: false,
+            persistPastedImages: true,
+            aiWriting: {
+                baseUrl: 'https://api.example.com/v1',
+                apiKey: 'local-key',
+                model: 'gpt-4o-mini'
+            }
         };
 
         expect(savePreferences(localStorage, preferences)).toBe(true);

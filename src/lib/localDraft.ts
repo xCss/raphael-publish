@@ -4,18 +4,32 @@ export const PREFERENCES_STORAGE_KEY = 'raphael-publish:preferences:v1';
 export type ThemeMode = 'light' | 'dark';
 export type PreviewDevice = 'mobile' | 'tablet' | 'pc';
 
+export interface AiWritingPreferences {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+}
+
 export interface StoredPreferences {
     themeMode: ThemeMode;
     activeTheme: string;
     previewDevice: PreviewDevice;
     scrollSyncEnabled: boolean;
+    persistPastedImages: boolean;
+    aiWriting: AiWritingPreferences;
 }
 
 export const DEFAULT_PREFERENCES: StoredPreferences = {
     themeMode: 'light',
     activeTheme: 'mac',
     previewDevice: 'pc',
-    scrollSyncEnabled: true
+    scrollSyncEnabled: true,
+    persistPastedImages: false,
+    aiWriting: {
+        baseUrl: '',
+        apiKey: '',
+        model: ''
+    }
 };
 
 const blobImageMarkdownPattern = /^!\[[^\]\n]*\]\(blob:[^)\n]+\)\n*/gm;
@@ -58,6 +72,17 @@ function isStoredPreferenceCandidate(value: unknown): value is Partial<StoredPre
     return typeof value === 'object' && value !== null;
 }
 
+function normalizeAiWritingPreferences(value: unknown, fallback: AiWritingPreferences) {
+    if (typeof value !== 'object' || value === null) return fallback;
+    const candidate = value as Partial<AiWritingPreferences>;
+
+    return {
+        baseUrl: typeof candidate.baseUrl === 'string' ? candidate.baseUrl : fallback.baseUrl,
+        apiKey: typeof candidate.apiKey === 'string' ? candidate.apiKey : fallback.apiKey,
+        model: typeof candidate.model === 'string' ? candidate.model : fallback.model
+    };
+}
+
 export function normalizePreferences(value: unknown, fallback: StoredPreferences = DEFAULT_PREFERENCES): StoredPreferences {
     if (!isStoredPreferenceCandidate(value)) return fallback;
 
@@ -65,7 +90,9 @@ export function normalizePreferences(value: unknown, fallback: StoredPreferences
         themeMode: isThemeMode(value.themeMode) ? value.themeMode : fallback.themeMode,
         activeTheme: typeof value.activeTheme === 'string' && value.activeTheme.length > 0 ? value.activeTheme : fallback.activeTheme,
         previewDevice: isPreviewDevice(value.previewDevice) ? value.previewDevice : fallback.previewDevice,
-        scrollSyncEnabled: typeof value.scrollSyncEnabled === 'boolean' ? value.scrollSyncEnabled : fallback.scrollSyncEnabled
+        scrollSyncEnabled: typeof value.scrollSyncEnabled === 'boolean' ? value.scrollSyncEnabled : fallback.scrollSyncEnabled,
+        persistPastedImages: typeof value.persistPastedImages === 'boolean' ? value.persistPastedImages : fallback.persistPastedImages,
+        aiWriting: normalizeAiWritingPreferences(value.aiWriting, fallback.aiWriting)
     };
 }
 
