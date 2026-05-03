@@ -134,7 +134,7 @@ test('opens settings without replacing the split editor and preview workspace', 
     await expect(page.getByText('Appearance')).toBeVisible();
     await expect(page.getByText('Drafts & Images')).toBeVisible();
     await expect(page.getByText('AI Writing')).toBeVisible();
-    await expect(page.getByText('Quality Checks')).toBeVisible();
+    await expect(page.getByText('Quality Checks')).toBeHidden();
     await expect(page.getByTestId('editor-input')).toBeVisible();
     await expect(page.getByTestId('preview-content')).toBeVisible();
 
@@ -155,6 +155,86 @@ test('opens settings as a mobile sheet', async ({ page }) => {
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
+});
+
+test('persists pasted image preference from settings', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+
+    const toggle = page.getByRole('switch', { name: '本地保存粘贴图片' });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).not.toBeChecked();
+
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+
+    await page.reload();
+    await page.getByTestId('settings-button').click();
+
+    await expect(page.getByRole('switch', { name: '本地保存粘贴图片' })).toBeChecked();
+});
+
+test('saves and clears local AI writing configuration', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+
+    await page.getByTestId('ai-base-url-input').fill('https://api.example.com/v1');
+    await page.getByTestId('ai-api-key-input').fill('local-key');
+    await page.getByTestId('ai-model-input').fill('gpt-4o-mini');
+    await expect(page.getByRole('button', { name: '保存设置' })).toBeInViewport({ ratio: 1 });
+    await page.getByTestId('settings-close').click();
+
+    await page.reload();
+    await page.getByTestId('settings-button').click();
+
+    await expect(page.getByTestId('ai-base-url-input')).toHaveValue('https://api.example.com/v1');
+    await expect(page.getByTestId('ai-api-key-input')).toHaveValue('local-key');
+    await expect(page.getByTestId('ai-model-input')).toHaveValue('gpt-4o-mini');
+    await expect(page.getByTestId('ai-config-warning')).toContainText('浏览器本地存储');
+
+    await page.getByTestId('ai-config-clear').click();
+
+    await expect(page.getByTestId('ai-base-url-input')).toHaveValue('');
+    await expect(page.getByTestId('ai-api-key-input')).toHaveValue('');
+    await expect(page.getByTestId('ai-model-input')).toHaveValue('');
+});
+
+test('formats selected editor text from the floating AI menu', async ({ page }) => {
+    await page.route('https://api.example.com/v1/chat/completions', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: '# Tailscale 五分钟入门\n\n家里 NAS、办公室服务器、海外 VPS 可以通过 Tailscale 互联。\n\n## 核心步骤\n\n- 注册账号\n- 每台机器安装客户端\n- 使用 MagicDNS 互访' } }] })
+        });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+    await page.getByTestId('ai-base-url-input').fill('https://api.example.com/v1');
+    await page.getByTestId('ai-api-key-input').fill('local-key');
+    await page.getByTestId('ai-model-input').fill('gpt-4o-mini');
+    await page.getByTestId('settings-close').click();
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('家里 NAS、办公室服务器、海外 VPS、出差笔记本——想让它们像在同一个局域网里互访，过去要折腾路由器端口转发、DDNS、自建 FRP、申请证书……');
+    await editor.focus();
+    await page.evaluate(() => {
+        const textarea = document.querySelector('[data-testid="editor-input"]') as HTMLTextAreaElement;
+        textarea.setSelectionRange(0, textarea.value.length);
+        textarea.dispatchEvent(new Event('select', { bubbles: true }));
+    });
+
+    await expect(page.getByTestId('editor-ai-trigger')).toBeVisible();
+    await page.getByTestId('editor-ai-trigger').hover();
+    await page.getByTestId('editor-ai-format').click();
+    await expect(page.getByTestId('editor-ai-trigger')).toHaveAttribute('data-loading', 'true');
+
+    await expect(editor).toHaveValue(/# Tailscale 五分钟入门/);
 });
 
 for (const device of [

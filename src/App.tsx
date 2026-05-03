@@ -14,7 +14,10 @@ import Toolbar from './components/Toolbar';
 import EditorPanel from './components/EditorPanel';
 import PreviewPanel from './components/PreviewPanel';
 import SettingsPanel from './components/SettingsPanel';
+import Toast from './components/Toast';
 import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
+import { resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
+import { requestAiRewrite, type AiRewriteAction } from './lib/aiRewrite';
 
 export default function App() {
     const [preferences] = useState(() => loadPreferences(typeof window === 'undefined' ? undefined : window.localStorage, {
@@ -30,6 +33,10 @@ export default function App() {
     const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'pc'>(preferences.previewDevice);
     const [activePanel, setActivePanel] = useState<'editor' | 'preview'>('editor');
     const [scrollSyncEnabled, setScrollSyncEnabled] = useState(preferences.scrollSyncEnabled);
+    const [persistPastedImages, setPersistPastedImages] = useState(preferences.persistPastedImages);
+    const [aiWriting, setAiWriting] = useState(preferences.aiWriting);
+    const [aiRewritePending, setAiRewritePending] = useState(false);
+    const [aiRewriteError, setAiRewriteError] = useState('');
     const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const previewRef = useRef<HTMLDivElement>(null);
@@ -56,9 +63,11 @@ export default function App() {
             themeMode,
             activeTheme,
             previewDevice,
-            scrollSyncEnabled
+            scrollSyncEnabled,
+            persistPastedImages,
+            aiWriting
         });
-    }, [themeMode, activeTheme, previewDevice, scrollSyncEnabled]);
+    }, [themeMode, activeTheme, previewDevice, scrollSyncEnabled, persistPastedImages, aiWriting]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -80,6 +89,8 @@ export default function App() {
     };
 
     useEffect(() => {
+        let cancelled = false;
+
         // Core rendering: markdown → HTML → styled HTML
         const rawHtml = md.render(preprocessMarkdown(markdownInput));
         const styledHtml = applyTheme(rawHtml, activeTheme);
@@ -88,7 +99,18 @@ export default function App() {
         // This is decoupled from core rendering logic
         const indexedHtml = markElementIndexes(styledHtml);
 
-        setRenderedHtml(indexedHtml);
+        resolveDraftImageReferencesInHtml(indexedHtml, resolveDraftImageReferenceToObjectUrl)
+            .then((resolvedHtml) => {
+                if (!cancelled) setRenderedHtml(resolvedHtml);
+            })
+            .catch((err: unknown) => {
+                console.warn('Failed to resolve persisted image previews:', err);
+                if (!cancelled) setRenderedHtml(indexedHtml);
+            });
+
+        return () => {
+            cancelled = true;
+        };
     }, [markdownInput, activeTheme]);
 
     useEffect(() => {
@@ -275,6 +297,40 @@ export default function App() {
         }
     }, [markdownInput, activePanel]);
 
+    const getSelectionContext = useCallback((start: number, end: number) => {
+        const contextStart = Math.max(0, start - 500);
+        const contextEnd = Math.min(markdownInput.length, end + 500);
+        return markdownInput.slice(contextStart, contextEnd);
+    }, [markdownInput]);
+
+    const handleSelectionAiAction = useCallback(async (action: AiRewriteAction, range: { start: number; end: number; text: string }) => {
+        setAiRewriteError('');
+
+        if (markdownInput.slice(range.start, range.end) !== range.text) {
+            setAiRewriteError('选区内容已变化，请重新选择后再使用 AI。');
+            return;
+        }
+
+        setAiRewritePending(true);
+        try {
+            const replacement = await requestAiRewrite({
+                aiWriting,
+                action,
+                selectedText: range.text,
+                context: getSelectionContext(range.start, range.end)
+            });
+            setMarkdownInput(
+                markdownInput.slice(0, range.start) +
+                replacement +
+                markdownInput.slice(range.end)
+            );
+        } catch (err) {
+            setAiRewriteError(err instanceof Error ? err.message : 'AI 改写失败，请检查配置和网络。');
+        } finally {
+            setAiRewritePending(false);
+        }
+    }, [aiWriting, getSelectionContext, markdownInput]);
+
     const deviceWidthClass = () => {
         if (previewDevice === 'mobile') return 'w-[520px] max-w-full';
         if (previewDevice === 'tablet') return 'w-[800px] max-w-full';
@@ -293,8 +349,24 @@ export default function App() {
             <Header themeMode={themeMode} onToggleTheme={toggleTheme} onOpenSettings={() => setIsSettingsOpen(true)} />
 
             <PwaStatus isOnline={isOnline} />
+            {aiRewriteError && (
+                <Toast
+                    message={aiRewriteError}
+                    variant="error"
+                    onDismiss={() => setAiRewriteError('')}
+                    dismissLabel="关闭 AI 提示"
+                    testId="ai-rewrite-toast"
+                />
+            )}
 
-            <SettingsPanel open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+            <SettingsPanel
+                open={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                persistPastedImages={persistPastedImages}
+                onPersistPastedImagesChange={setPersistPastedImages}
+                aiWriting={aiWriting}
+                onAiWritingChange={setAiWriting}
+            />
 
             {/* 移动端 Tab 切换 */}
             <div className="md:hidden glass-toolbar flex items-center z-[90]">
@@ -359,6 +431,9 @@ export default function App() {
                         editorScrollRef={editorScrollRef}
                         onEditorScroll={handleEditorScroll}
                         scrollSyncEnabled={scrollSyncEnabled}
+                        persistPastedImages={persistPastedImages}
+                        aiRewritePending={aiRewritePending}
+                        onAiSelectionAction={handleSelectionAiAction}
                     />
                 </div>
                 <div className={`${activePanel === 'preview' ? 'flex' : 'hidden'} md:flex flex-col overflow-hidden`}>
