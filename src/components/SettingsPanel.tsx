@@ -158,11 +158,6 @@ export default function SettingsPanel({
                         {section.description}
                       </p>
                     </div>
-                    {section.title === "Drafts & Images" ? null : (
-                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-[#86868b] shadow-sm dark:bg-[#2c2c2e] dark:text-[#a1a1a6]">
-                        Soon
-                      </span>
-                    )}
                   </div>
                   {section.title === "Drafts & Images" && (
                     <div className="mt-4 rounded-2xl bg-white/80 p-4 shadow-sm dark:bg-[#2c2c2e]/80">
