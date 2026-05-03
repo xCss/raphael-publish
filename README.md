@@ -2,7 +2,7 @@
 
 专为**微信公众号**与**内容创作者**打造的现代 Markdown 排版引擎。
 
-> **在线体验**：[https://publish.raphael.app](https://publish.raphael.app)
+> **在线体验**：[https://xrv.pages.dev](https://xrv.pages.dev)
 
 ![Raphael Publish 截图](media/screenshot.png)
 
@@ -13,7 +13,7 @@
 ### 魔法粘贴
 
 **从飞书、Notion、Word 甚至任意网页复制富文本**，粘贴瞬间自动净化为纯净 Markdown。无需手写 Markdown 语法，粘贴即用。
-同时支持**直接粘贴截图或图片（Ctrl/Cmd + V）**，自动插入 Markdown 图片语法。
+同时支持**直接粘贴截图或图片（Ctrl/Cmd + V）**，自动插入 Markdown 图片语法，并使用本地 `blob:` 地址预览，避免把编辑区撑成超长 Base64 文本。
 
 ### 30 套高定样式
 
@@ -31,7 +31,7 @@
   </a>
 </p>
 <p align="center">
-  <a href="https://publish.raphael.app">
+  <a href="https://xrv.pages.dev">
     <img src="https://img.shields.io/badge/%E2%96%B6%20Live%20Preview-Visit%20Pages-2ea44f?style=for-the-badge" alt="Live Preview on Pages" />
   </a>
   <a href="media/demo.mp4">
@@ -62,10 +62,20 @@
 
 支持导出为 PDF 和 HTML 文件，适合存档、邮件发送或网页发布。
 
+### 本地优先与 PWA
+
+Raphael Publish 支持作为 PWA 安装到桌面或手机，也能在离线时继续打开和编辑：
+
+- **本地草稿自动保存**：编辑内容会自动保存到浏览器本地，刷新或重新打开后可继续创作。
+- **偏好记忆**：自动恢复上次使用的主题、明暗模式、预览设备和滚动同步状态。
+- **离线可用**：核心应用资源由 Service Worker 缓存，网络不稳定时也能继续排版。
+- **轻量更新提示**：新版本可用或离线状态变化时，通过右上角 Toast 提醒，不打断写作。
+
 ## 技术栈
 
 - **React 18** + **TypeScript**
 - **Vite 5** 构建
+- **vite-plugin-pwa** PWA 与 Service Worker
 - **Tailwind CSS 3** 样式
 - **markdown-it** Markdown 解析
 - **highlight.js** 代码高亮
