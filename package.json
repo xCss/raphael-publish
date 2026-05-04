@@ -16,6 +16,7 @@
     "@types/turndown": "^5.0.6",
     "framer-motion": "^11.11.11",
     "highlight.js": "^11.10.0",
+    "html2canvas": "1.4.1",
     "html2pdf.js": "^0.14.0",
     "lucide-react": "^0.460.0",
     "markdown-it": "^14.1.0",
@@ -33,20 +34,25 @@
     "@types/node": "^25.3.3",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.3",
+    "@vitejs/plugin-react": "^5.1.2",
     "autoprefixer": "^10.4.20",
-    "eslint": "^9.13.0",
+    "eslint": "^9.39.3",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",
     "globals": "^15.11.0",
-    "jsdom": "^28.1.0",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.14",
+    "jsdom": "29.1.1",
+    "postcss": "8.5.13",
+    "tailwindcss": "^3.4.19",
     "typescript": "~5.6.2",
-    "typescript-eslint": "^8.11.0",
-    "vite": "^5.4.10",
-    "vite-plugin-pwa": "^1.2.0",
-    "vitest": "^4.0.18",
+    "typescript-eslint": "8.59.1",
+    "vite": "^7.3.2",
+    "vite-plugin-pwa": "1.2.0",
+    "vitest": "4.1.5",
     "workbox-window": "^7.4.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "serialize-javascript": "7.0.5"
+    }
   }
 }
