@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bot, Wand2 } from 'lucide-react';
+import { Bot, FileText, PenLine, Sparkles, Wand2 } from 'lucide-react';
 import { handleSmartPaste } from '../lib/htmlToMarkdown';
 import { persistDraftImage } from '../lib/imagePersistence';
 import type { AiRewriteAction } from '../lib/aiRewrite';
@@ -12,13 +12,14 @@ interface EditorPanelProps {
     scrollSyncEnabled: boolean;
     persistPastedImages: boolean;
     aiRewritePending: boolean;
-    onAiSelectionAction: (action: AiRewriteAction, range: { start: number; end: number; text: string }) => void;
+    aiAvailable: boolean;
+    onAiSelectionAction: (action: AiRewriteAction, range: { start: number; end: number; text: string } | null) => void;
 }
 
-export default function EditorPanel({ markdownInput, onInputChange, editorScrollRef, onEditorScroll, scrollSyncEnabled, persistPastedImages, aiRewritePending, onAiSelectionAction }: EditorPanelProps) {
+export default function EditorPanel({ markdownInput, onInputChange, editorScrollRef, onEditorScroll, scrollSyncEnabled, persistPastedImages, aiRewritePending, aiAvailable, onAiSelectionAction }: EditorPanelProps) {
     const [selectionRange, setSelectionRange] = useState<{ start: number; end: number; text: string } | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
-    const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+    const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({ right: 24, top: 24 });
 
     const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
         handleSmartPaste(e, onInputChange, {
@@ -34,7 +35,7 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
 
         if (start === end || !text.trim()) {
             setSelectionRange(null);
-            setMenuOpen(false);
+            if (!aiAvailable) setMenuOpen(false);
             return;
         }
 
@@ -43,10 +44,39 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
     };
 
     const runAction = (action: AiRewriteAction) => {
-        if (!selectionRange) return;
         setMenuOpen(false);
         onAiSelectionAction(action, selectionRange);
     };
+
+    const aiActions: Array<{
+        action: AiRewriteAction;
+        testId: string;
+        title: string;
+        description: string;
+        icon: React.ReactNode;
+    }> = [
+        {
+            action: 'format',
+            testId: 'editor-ai-format',
+            title: '格式化',
+            description: '整理结构与排版',
+            icon: <FileText size={16} />
+        },
+        {
+            action: 'expand',
+            testId: 'editor-ai-expand',
+            title: '扩写',
+            description: '补充细节更完整',
+            icon: <Sparkles size={16} />
+        },
+        {
+            action: 'rewrite',
+            testId: 'editor-ai-rewrite',
+            title: '改写',
+            description: '优化表达和语气',
+            icon: <PenLine size={16} />
+        }
+    ];
 
     useEffect(() => {
         const syncSelection = () => {
@@ -58,7 +88,7 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
 
             if (start === end || !text.trim()) {
                 setSelectionRange(null);
-                setMenuOpen(false);
+                if (!aiAvailable) setMenuOpen(false);
                 return;
             }
 
@@ -68,7 +98,7 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
 
         document.addEventListener('selectionchange', syncSelection);
         return () => document.removeEventListener('selectionchange', syncSelection);
-    }, [editorScrollRef]);
+    }, [aiAvailable, editorScrollRef]);
 
     return (
         <div className="border-r border-[#00000015] dark:border-[#ffffff15] flex flex-col relative z-30 bg-transparent flex-1 min-h-0">
@@ -88,7 +118,7 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
                 spellCheck={false}
             />
 
-            {selectionRange && (
+            {aiAvailable && markdownInput.trim() && (
                 <div className="absolute z-[80]" style={menuStyle} onMouseEnter={() => setMenuOpen(true)}>
                     <button
                         type="button"
@@ -96,7 +126,7 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
                         data-loading={aiRewritePending ? 'true' : 'false'}
                         aria-label="AI 选区工具"
                         aria-busy={aiRewritePending}
-                        onClick={() => setMenuOpen((open) => !open)}
+                        onClick={() => setMenuOpen(true)}
                         className={`relative flex h-10 w-10 items-center justify-center rounded-full bg-[#0066cc] text-white shadow-apple transition-transform hover:scale-105 dark:bg-[#0a84ff] ${aiRewritePending ? 'animate-pulse shadow-[0_0_0_8px_rgba(0,102,204,0.10)] dark:shadow-[0_0_0_8px_rgba(10,132,255,0.14)]' : ''}`}
                     >
                         {aiRewritePending && (
@@ -105,10 +135,25 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
                         <Bot size={18} />
                     </button>
                     {menuOpen && (
-                        <div className="absolute right-0 mt-2 w-32 overflow-hidden rounded-2xl border border-black/10 bg-white p-1 text-sm font-semibold text-[#1d1d1f] shadow-apple-lg dark:border-white/10 dark:bg-[#2c2c2e] dark:text-[#f5f5f7]" onMouseLeave={() => setMenuOpen(false)}>
-                            <button type="button" data-testid="editor-ai-format" onClick={() => runAction('format')} disabled={aiRewritePending} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/10">格式化</button>
-                            <button type="button" data-testid="editor-ai-expand" onClick={() => runAction('expand')} disabled={aiRewritePending} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/10">扩写</button>
-                            <button type="button" data-testid="editor-ai-rewrite" onClick={() => runAction('rewrite')} disabled={aiRewritePending} className="block w-full rounded-xl px-3 py-2 text-left hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/10">改写</button>
+                        <div className="absolute right-0 mt-2 w-48 overflow-hidden rounded-2xl border border-black/10 bg-white p-1 text-sm text-[#1d1d1f] shadow-apple-lg dark:border-white/10 dark:bg-[#2c2c2e] dark:text-[#f5f5f7]" onMouseLeave={() => setMenuOpen(false)}>
+                            {aiActions.map((item) => (
+                                <button
+                                    key={item.action}
+                                    type="button"
+                                    data-testid={item.testId}
+                                    onClick={() => runAction(item.action)}
+                                    disabled={aiRewritePending}
+                                    className="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/10"
+                                >
+                                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#0066cc]/10 text-[#0066cc] dark:bg-[#0a84ff]/15 dark:text-[#0a84ff]">
+                                        {item.icon}
+                                    </span>
+                                    <span className="min-w-0">
+                                        <span className="block font-semibold leading-5">{item.title}</span>
+                                        <span className="block text-[12px] font-medium leading-4 text-[#86868b] dark:text-[#a1a1a6]">{item.description}</span>
+                                    </span>
+                                </button>
+                            ))}
                         </div>
                     )}
                 </div>

@@ -125,15 +125,17 @@ test('opens settings without replacing the split editor and preview workspace', 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
 
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-test-image)\n\n正文');
+
     await page.getByTestId('settings-button').click();
 
     const panel = page.getByTestId('settings-panel');
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute('data-variant', 'desktop-drawer');
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
-    await expect(page.getByText('Appearance')).toBeVisible();
-    await expect(page.getByText('Drafts & Images')).toBeVisible();
-    await expect(page.getByText('AI Writing')).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'Drafts & Images' })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'AI Writing' })).toBeVisible();
     await expect(page.getByText('Quality Checks')).toBeHidden();
     await expect(page.getByTestId('editor-input')).toBeVisible();
     await expect(page.getByTestId('preview-content')).toBeVisible();
@@ -151,7 +153,7 @@ test('opens settings as a mobile sheet', async ({ page }) => {
     const panel = page.getByTestId('settings-panel');
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute('data-variant', 'mobile-sheet');
-    await expect(page.getByText('AI Writing')).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'AI Writing' })).toBeVisible();
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
@@ -160,6 +162,9 @@ test('opens settings as a mobile sheet', async ({ page }) => {
 test('persists pasted image preference from settings', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-test-image)\n\n正文');
 
     await page.getByTestId('settings-button').click();
 
@@ -176,16 +181,120 @@ test('persists pasted image preference from settings', async ({ page }) => {
     await expect(page.getByRole('switch', { name: '本地保存粘贴图片' })).toBeChecked();
 });
 
+test('confirms before disabling pasted image storage and clears local images', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-test-image)\n\n正文');
+
+    await page.getByTestId('settings-button').click();
+
+    const toggle = page.getByRole('switch', { name: '本地保存粘贴图片' });
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+
+    await page.evaluate(async () => {
+        const request = indexedDB.open('raphael-publish:image-store:v1', 1);
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            request.onupgradeneeded = () => {
+                const db = request.result;
+                if (!db.objectStoreNames.contains('draft-images')) {
+                    const store = db.createObjectStore('draft-images', { keyPath: 'id' });
+                    store.createIndex('draftId', 'draftId', { unique: false });
+                }
+            };
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+        });
+        await new Promise<void>((resolve, reject) => {
+            const transaction = database.transaction('draft-images', 'readwrite');
+            transaction.objectStore('draft-images').put({
+                id: 'pasted-test-image',
+                draftId: 'default',
+                blob: new Blob(['image-bytes'], { type: 'image/png' }),
+                mimeType: 'image/png',
+                size: 11,
+                createdAt: Date.now(),
+                lastUsedAt: Date.now()
+            });
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+        database.close();
+    });
+
+    page.once('dialog', async (dialog) => {
+        expect(dialog.message()).toContain('清空本地保存的粘贴图片');
+        await dialog.dismiss();
+    });
+    await toggle.click();
+    await expect(toggle).toBeChecked();
+
+    page.once('dialog', async (dialog) => {
+        expect(dialog.message()).toContain('清空本地保存的粘贴图片');
+        await dialog.accept();
+    });
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+
+    await expect(editor).toHaveValue(/raphael-image:\/\/draft\/default\/pasted-test-image/);
+
+    await expect.poll(() => page.evaluate(async () => {
+        const request = indexedDB.open('raphael-publish:image-store:v1');
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+        });
+        const count = await new Promise<number>((resolve, reject) => {
+            const transaction = database.transaction('draft-images', 'readonly');
+            const countRequest = transaction.objectStore('draft-images').count();
+            countRequest.onsuccess = () => resolve(countRequest.result);
+            countRequest.onerror = () => reject(countRequest.error);
+        });
+        database.close();
+        return count;
+    })).toBe(0);
+});
+
+test('can remove local image references when disabling pasted image storage', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-test-image)\n\n正文');
+
+    await page.getByTestId('settings-button').click();
+
+    const storageToggle = page.getByRole('switch', { name: '本地保存粘贴图片' });
+    await storageToggle.click();
+    await expect(storageToggle).toBeChecked();
+
+    const keepReferencesToggle = page.getByRole('switch', { name: '关闭缓存时保留 Markdown 图片引用' });
+    await expect(keepReferencesToggle).toBeChecked();
+    await keepReferencesToggle.click();
+    await expect(keepReferencesToggle).not.toBeChecked();
+
+    page.once('dialog', async (dialog) => {
+        await dialog.accept();
+    });
+    await storageToggle.click();
+    await expect(storageToggle).not.toBeChecked();
+    await expect(editor).not.toHaveValue(/raphael-image:\/\/draft\/default\/pasted-test-image/);
+    await expect(editor).toHaveValue(/正文/);
+});
+
 test('saves and clears local AI writing configuration', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
 
     await page.getByTestId('settings-button').click();
 
+    await expect(page.getByRole('switch', { name: '转发 AI 请求' })).toBeChecked();
     await page.getByTestId('ai-base-url-input').fill('https://api.example.com/v1');
     await page.getByTestId('ai-api-key-input').fill('local-key');
     await page.getByTestId('ai-model-input').fill('gpt-4o-mini');
-    await expect(page.getByRole('button', { name: '保存设置' })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByTestId('settings-save')).toBeInViewport({ ratio: 1 });
     await page.getByTestId('settings-close').click();
 
     await page.reload();
@@ -204,7 +313,7 @@ test('saves and clears local AI writing configuration', async ({ page }) => {
 });
 
 test('formats selected editor text from the floating AI menu', async ({ page }) => {
-    await page.route('https://api.example.com/v1/chat/completions', async (route) => {
+    await page.route('https://relayx.bax.workers.dev/https://api.example.com/v1/chat/completions', async (route) => {
         await new Promise((resolve) => setTimeout(resolve, 350));
         await route.fulfill({
             contentType: 'application/json',
@@ -235,6 +344,78 @@ test('formats selected editor text from the floating AI menu', async ({ page }) 
     await expect(page.getByTestId('editor-ai-trigger')).toHaveAttribute('data-loading', 'true');
 
     await expect(editor).toHaveValue(/# Tailscale 五分钟入门/);
+});
+
+test('shows AI bot for a usable model and rewrites the whole document without selection', async ({ page }) => {
+    await page.route('https://relayx.bax.workers.dev/https://api.example.com/v1/chat/completions', async (route) => {
+        const body = route.request().postDataJSON() as { max_tokens?: number };
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                choices: [{ message: { content: body.max_tokens === 1 ? 'ok' : '# 全文已改写\n\n这是处理后的完整内容。' } }]
+            })
+        });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+    await page.getByTestId('ai-base-url-input').fill('https://api.example.com/v1');
+    await page.getByTestId('ai-api-key-input').fill('local-key');
+    await page.getByTestId('ai-model-input').fill('gpt-4o-mini');
+    await expect(page.getByTestId('ai-model-status')).toHaveAttribute('data-status', 'available', { timeout: 5000 });
+    await expect(page.getByTestId('ai-model-status')).toHaveAttribute('title', /模型可用/);
+    await page.getByTestId('settings-close').click();
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('第一段内容\n\n第二段内容');
+    await editor.focus();
+    await page.keyboard.press('ArrowRight');
+
+    await expect(page.getByTestId('editor-ai-trigger')).toBeVisible();
+    await page.getByTestId('editor-ai-trigger').click();
+    await page.getByTestId('editor-ai-rewrite').click();
+
+    await expect(editor).toHaveValue('# 全文已改写\n\n这是处理后的完整内容。');
+});
+
+test('keeps user edits made while a whole-document AI rewrite is pending', async ({ page }) => {
+    await page.route('https://relayx.bax.workers.dev/https://api.example.com/v1/chat/completions', async (route) => {
+        const body = route.request().postDataJSON() as { max_tokens?: number };
+        if (body.max_tokens === 1) {
+            await route.fulfill({
+                contentType: 'application/json',
+                body: JSON.stringify({ choices: [{ message: { content: 'ok' } }] })
+            });
+            return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({ choices: [{ message: { content: '# AI 旧结果' } }] })
+        });
+    });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+    await page.getByTestId('ai-base-url-input').fill('https://api.example.com/v1');
+    await page.getByTestId('ai-api-key-input').fill('local-key');
+    await page.getByTestId('ai-model-input').fill('gpt-4o-mini');
+    await expect(page.getByTestId('ai-model-status')).toHaveAttribute('data-status', 'available', { timeout: 5000 });
+    await page.getByTestId('settings-close').click();
+
+    const editor = page.getByTestId('editor-input');
+    await editor.fill('准备改写的旧内容');
+    await page.getByTestId('editor-ai-trigger').click();
+    await page.getByTestId('editor-ai-rewrite').click();
+    await expect(page.getByTestId('editor-ai-trigger')).toHaveAttribute('data-loading', 'true');
+
+    await editor.fill('用户编辑的新内容');
+
+    await expect(editor).toHaveValue('用户编辑的新内容');
+    await expect(page.getByTestId('ai-rewrite-toast')).toContainText('正文内容已变化');
 });
 
 for (const device of [

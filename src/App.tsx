@@ -16,8 +16,8 @@ import PreviewPanel from './components/PreviewPanel';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
 import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
-import { resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
-import { requestAiRewrite, type AiRewriteAction } from './lib/aiRewrite';
+import { cleanupOrphanDraftImages, clearPersistedDraftImages, removeDraftImageReferencesFromMarkdown, resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
+import { checkAiModelAvailability, requestAiRewrite, type AiModelAvailabilityResult, type AiRewriteAction } from './lib/aiRewrite';
 
 export default function App() {
     const [preferences] = useState(() => loadPreferences(typeof window === 'undefined' ? undefined : window.localStorage, {
@@ -34,7 +34,11 @@ export default function App() {
     const [activePanel, setActivePanel] = useState<'editor' | 'preview'>('editor');
     const [scrollSyncEnabled, setScrollSyncEnabled] = useState(preferences.scrollSyncEnabled);
     const [persistPastedImages, setPersistPastedImages] = useState(preferences.persistPastedImages);
+    const [keepImageReferencesOnDisable, setKeepImageReferencesOnDisable] = useState(preferences.keepImageReferencesOnDisable);
+    const [relayAiRequests, setRelayAiRequests] = useState(preferences.relayAiRequests);
     const [aiWriting, setAiWriting] = useState(preferences.aiWriting);
+    const [aiModelAvailability, setAiModelAvailability] = useState<AiModelAvailabilityResult>({ ok: false, message: '请先填写 BASE_URL、API_KEY 和 MODEL' });
+    const [aiModelChecking, setAiModelChecking] = useState(false);
     const [aiRewritePending, setAiRewritePending] = useState(false);
     const [aiRewriteError, setAiRewriteError] = useState('');
     const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -59,15 +63,57 @@ export default function App() {
     }, [markdownInput]);
 
     useEffect(() => {
+        if (!persistPastedImages) return;
+
+        const timeoutId = window.setTimeout(() => {
+            cleanupOrphanDraftImages(markdownInput).catch((err: unknown) => {
+                console.warn('Failed to cleanup orphan pasted images:', err);
+            });
+        }, 2000);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [markdownInput, persistPastedImages]);
+
+    useEffect(() => {
         savePreferences(window.localStorage, {
             themeMode,
             activeTheme,
             previewDevice,
             scrollSyncEnabled,
             persistPastedImages,
+            keepImageReferencesOnDisable,
+            relayAiRequests,
             aiWriting
         });
-    }, [themeMode, activeTheme, previewDevice, scrollSyncEnabled, persistPastedImages, aiWriting]);
+    }, [themeMode, activeTheme, previewDevice, scrollSyncEnabled, persistPastedImages, keepImageReferencesOnDisable, relayAiRequests, aiWriting]);
+
+    useEffect(() => {
+        if (!aiWriting.baseUrl.trim() || !aiWriting.apiKey.trim() || !aiWriting.model.trim()) {
+            setAiModelChecking(false);
+            setAiModelAvailability({ ok: false, message: '请先填写 BASE_URL、API_KEY 和 MODEL' });
+            return;
+        }
+
+        let cancelled = false;
+        setAiModelChecking(true);
+        const timeoutId = window.setTimeout(() => {
+            checkAiModelAvailability({ aiWriting, relayAiRequests })
+                .then((result) => {
+                    if (!cancelled) setAiModelAvailability(result);
+                })
+                .catch((err: unknown) => {
+                    if (!cancelled) setAiModelAvailability({ ok: false, message: err instanceof Error ? err.message : '模型检测失败' });
+                })
+                .finally(() => {
+                    if (!cancelled) setAiModelChecking(false);
+                });
+        }, 500);
+
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timeoutId);
+        };
+    }, [aiWriting, relayAiRequests]);
 
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
@@ -88,8 +134,27 @@ export default function App() {
         });
     };
 
+    const handlePersistPastedImagesChange = (enabled: boolean) => {
+        if (enabled || !persistPastedImages) {
+            setPersistPastedImages(enabled);
+            return;
+        }
+
+        const shouldDisable = window.confirm('关闭后将清空本地保存的粘贴图片，当前文章中的本地图片可能无法继续预览。确定关闭吗？');
+        if (!shouldDisable) return;
+
+        if (!keepImageReferencesOnDisable) {
+            setMarkdownInput((currentMarkdown) => removeDraftImageReferencesFromMarkdown(currentMarkdown));
+        }
+        setPersistPastedImages(false);
+        clearPersistedDraftImages().catch((err: unknown) => {
+            console.warn('Failed to clear pasted image storage:', err);
+        });
+    };
+
     useEffect(() => {
         let cancelled = false;
+        let objectUrls: string[] = [];
 
         // Core rendering: markdown → HTML → styled HTML
         const rawHtml = md.render(preprocessMarkdown(markdownInput));
@@ -100,8 +165,13 @@ export default function App() {
         const indexedHtml = markElementIndexes(styledHtml);
 
         resolveDraftImageReferencesInHtml(indexedHtml, resolveDraftImageReferenceToObjectUrl)
-            .then((resolvedHtml) => {
-                if (!cancelled) setRenderedHtml(resolvedHtml);
+            .then((result) => {
+                if (cancelled) {
+                    result.objectUrls.forEach((url) => URL.revokeObjectURL(url));
+                    return;
+                }
+                objectUrls = result.objectUrls;
+                setRenderedHtml(result.html);
             })
             .catch((err: unknown) => {
                 console.warn('Failed to resolve persisted image previews:', err);
@@ -110,6 +180,7 @@ export default function App() {
 
         return () => {
             cancelled = true;
+            objectUrls.forEach((url) => URL.revokeObjectURL(url));
         };
     }, [markdownInput, activeTheme]);
 
@@ -225,8 +296,15 @@ export default function App() {
 
     const handleExportHtml = () => {
         // Clean internal attributes before exporting
-        const cleanHtml = cleanInternalAttributes(renderedHtml);
-        const blob = new Blob([cleanHtml], { type: 'text/html;charset=utf-8' });
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(cleanInternalAttributes(renderedHtml), 'text/html');
+        doc.querySelectorAll('img[data-original-src]').forEach((image) => {
+            const originalSrc = image.getAttribute('data-original-src');
+            if (originalSrc) image.setAttribute('src', originalSrc);
+            image.removeAttribute('data-original-src');
+        });
+
+        const blob = new Blob([doc.body.innerHTML], { type: 'text/html;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -260,9 +338,11 @@ export default function App() {
         cloneContainer.appendChild(clonedElement);
 
         document.body.appendChild(cloneContainer);
-        html2pdf().set(opt).from(cloneContainer).save().then(() => {
-            document.body.removeChild(cloneContainer);
-        });
+        try {
+            await html2pdf().set(opt).from(cloneContainer).save();
+        } finally {
+            cloneContainer.remove();
+        }
     };
 
     const handleImageClick = useCallback((info: { type: string; index: number; src?: string; alt?: string; content?: string }) => {
@@ -317,19 +397,38 @@ export default function App() {
                 aiWriting,
                 action,
                 selectedText: range.text,
-                context: getSelectionContext(range.start, range.end)
+                context: getSelectionContext(range.start, range.end),
+                relayAiRequests
             });
-            setMarkdownInput(
-                markdownInput.slice(0, range.start) +
-                replacement +
-                markdownInput.slice(range.end)
-            );
+            setMarkdownInput((currentMarkdown) => {
+                const isWholeDocumentRange = range.start === 0 && range.end === range.text.length;
+                const currentTargetText = isWholeDocumentRange
+                    ? currentMarkdown
+                    : currentMarkdown.slice(range.start, range.end);
+                if (currentTargetText !== range.text) {
+                    setAiRewriteError(isWholeDocumentRange ? '正文内容已变化，已保留你的最新编辑。' : '选区内容已变化，请重新选择后再使用 AI。');
+                    return currentMarkdown;
+                }
+
+                return currentMarkdown.slice(0, range.start) +
+                    replacement +
+                    currentMarkdown.slice(range.end);
+            });
         } catch (err) {
             setAiRewriteError(err instanceof Error ? err.message : 'AI 改写失败，请检查配置和网络。');
         } finally {
             setAiRewritePending(false);
         }
-    }, [aiWriting, getSelectionContext, markdownInput]);
+    }, [aiWriting, getSelectionContext, markdownInput, relayAiRequests]);
+
+    const handleEditorAiAction = useCallback((action: AiRewriteAction, range: { start: number; end: number; text: string } | null) => {
+        const effectiveRange = range ?? { start: 0, end: markdownInput.length, text: markdownInput };
+        if (!effectiveRange.text.trim()) {
+            setAiRewriteError('没有可供 AI 处理的正文内容。');
+            return;
+        }
+        void handleSelectionAiAction(action, effectiveRange);
+    }, [handleSelectionAiAction, markdownInput]);
 
     const deviceWidthClass = () => {
         if (previewDevice === 'mobile') return 'w-[520px] max-w-full';
@@ -363,9 +462,15 @@ export default function App() {
                 open={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
                 persistPastedImages={persistPastedImages}
-                onPersistPastedImagesChange={setPersistPastedImages}
+                onPersistPastedImagesChange={handlePersistPastedImagesChange}
+                keepImageReferencesOnDisable={keepImageReferencesOnDisable}
+                onKeepImageReferencesOnDisableChange={setKeepImageReferencesOnDisable}
+                relayAiRequests={relayAiRequests}
+                onRelayAiRequestsChange={setRelayAiRequests}
                 aiWriting={aiWriting}
                 onAiWritingChange={setAiWriting}
+                aiModelAvailability={aiModelAvailability}
+                aiModelChecking={aiModelChecking}
             />
 
             {/* 移动端 Tab 切换 */}
@@ -433,7 +538,8 @@ export default function App() {
                         scrollSyncEnabled={scrollSyncEnabled}
                         persistPastedImages={persistPastedImages}
                         aiRewritePending={aiRewritePending}
-                        onAiSelectionAction={handleSelectionAiAction}
+                        aiAvailable={aiModelAvailability.ok}
+                        onAiSelectionAction={handleEditorAiAction}
                     />
                 </div>
                 <div className={`${activePanel === 'preview' ? 'flex' : 'hidden'} md:flex flex-col overflow-hidden`}>

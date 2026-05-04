@@ -1,12 +1,17 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { CheckCircle2, CircleHelp, Loader2, X, XCircle } from "lucide-react";
+import type { AiModelAvailabilityResult } from "../lib/aiRewrite";
 
 interface SettingsPanelProps {
   open: boolean;
   onClose: () => void;
   persistPastedImages: boolean;
   onPersistPastedImagesChange: (enabled: boolean) => void;
+  keepImageReferencesOnDisable: boolean;
+  onKeepImageReferencesOnDisableChange: (enabled: boolean) => void;
+  relayAiRequests: boolean;
+  onRelayAiRequestsChange: (enabled: boolean) => void;
   aiWriting: {
     baseUrl: string;
     apiKey: string;
@@ -17,6 +22,8 @@ interface SettingsPanelProps {
     apiKey: string;
     model: string;
   }) => void;
+  aiModelAvailability: AiModelAvailabilityResult;
+  aiModelChecking: boolean;
 }
 
 const sections = [
@@ -54,8 +61,14 @@ export default function SettingsPanel({
   onClose,
   persistPastedImages,
   onPersistPastedImagesChange,
+  keepImageReferencesOnDisable,
+  onKeepImageReferencesOnDisableChange,
+  relayAiRequests,
+  onRelayAiRequestsChange,
   aiWriting,
   onAiWritingChange,
+  aiModelAvailability,
+  aiModelChecking,
 }: SettingsPanelProps) {
   const isDesktopDrawer = useMediaQuery("(min-width: 640px)");
   const panelInitial = isDesktopDrawer
@@ -67,6 +80,14 @@ export default function SettingsPanel({
   const panelExit = isDesktopDrawer
     ? { opacity: 0, x: 36 }
     : { opacity: 0, y: 28 };
+  const aiModelStatus = !aiWriting.baseUrl.trim() || !aiWriting.apiKey.trim() || !aiWriting.model.trim()
+    ? 'empty'
+    : aiModelChecking
+      ? 'checking'
+      : aiModelAvailability.ok
+        ? 'available'
+        : 'unavailable';
+  const aiModelStatusTitle = aiModelStatus === 'checking' ? '正在检测模型是否可用...' : aiModelAvailability.message;
 
   useEffect(() => {
     if (!open) return;
@@ -129,7 +150,7 @@ export default function SettingsPanel({
                   设置
                 </h2>
                 <p className="mt-1 text-sm text-[#86868b] dark:text-[#a1a1a6]">
-                  管理本地优先、图片和 AI 能力。
+                  管理本地图片缓存和 AI 能力。
                 </p>
               </div>
               <button
@@ -167,7 +188,7 @@ export default function SettingsPanel({
                           className="min-w-0 flex-1"
                         >
                           <span className="block text-sm font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
-                            使用本地IndexedDB存储图片
+                            使用本地DB缓存图片
                           </span>
                           {/*<span className="mt-1 block text-[12px] leading-5 text-[#86868b] dark:text-[#a1a1a6]">
                             开启后，新粘贴图片将使用本地IndexedDB存储。
@@ -183,10 +204,30 @@ export default function SettingsPanel({
                           onClick={() =>
                             onPersistPastedImagesChange(!persistPastedImages)
                           }
-                          className={`relative h-8 w-14 shrink-0 overflow-hidden rounded-full transition-colors ${persistPastedImages ? "bg-[#0066cc] dark:bg-[#0a84ff]" : "bg-black/15 dark:bg-white/20"}`}
+                          className={`relative h-6 w-14 shrink-0 overflow-hidden rounded-full transition-colors ${persistPastedImages ? "bg-[#0066cc] dark:bg-[#0a84ff]" : "bg-black/15 dark:bg-white/20"}`}
                         >
                           <span
-                            className={`absolute left-1 top-1 h-6 w-6 rounded-full bg-white shadow-sm transition-transform ${persistPastedImages ? "translate-x-6" : "translate-x-0"}`}
+                            className={`absolute left-1 top-1 h-4 w-6 rounded-full bg-white shadow-sm transition-transform ${persistPastedImages ? "translate-x-6" : "translate-x-0"}`}
+                          />
+                          </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-4 mt-4">
+                        <div className="min-w-0 flex-1">
+                          <span className="block text-xs text-[#1d1d1f] dark:text-[#f5f5f7]">
+                            关闭时，保留 `raphael-image://` 引用
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          data-testid="keep-image-references-toggle"
+                          role="switch"
+                          aria-checked={keepImageReferencesOnDisable}
+                          aria-label="关闭缓存时保留 Markdown 图片引用"
+                          onClick={() => onKeepImageReferencesOnDisableChange(!keepImageReferencesOnDisable)}
+                          className={`relative h-6 w-14 shrink-0 overflow-hidden rounded-full transition-colors ${keepImageReferencesOnDisable ? 'bg-[#0066cc] dark:bg-[#0a84ff]' : 'bg-black/15 dark:bg-white/20'}`}
+                        >
+                          <span
+                            className={`absolute left-1 top-1 h-4 w-6 rounded-full bg-white shadow-sm transition-transform ${keepImageReferencesOnDisable ? 'translate-x-6' : 'translate-x-0'}`}
                           />
                         </button>
                       </div>
@@ -200,6 +241,36 @@ export default function SettingsPanel({
                       >
                         API Key 仅保存在浏览器本地存储中。
                       </p>
+                      <div className="flex items-center justify-between gap-4 rounded-2xl border border-black/5 bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="text-sm font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                            使用
+                            <a
+                              href="https://github.com/xCss/relayx"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mx-1 text-[#0066cc] underline-offset-2 hover:underline dark:text-[#0a84ff]"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              RELAYX
+                            </a>
+                            转发AI请求
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          data-testid="relay-ai-requests-toggle"
+                          role="switch"
+                          aria-checked={relayAiRequests}
+                          aria-label="转发 AI 请求"
+                          onClick={() => onRelayAiRequestsChange(!relayAiRequests)}
+                          className={`relative h-6 w-14 shrink-0 overflow-hidden rounded-full transition-colors ${relayAiRequests ? 'bg-[#0066cc] dark:bg-[#0a84ff]' : 'bg-black/15 dark:bg-white/20'}`}
+                        >
+                          <span
+                            className={`absolute left-1 top-1 h-4 w-6 rounded-full bg-white shadow-sm transition-transform ${relayAiRequests ? 'translate-x-6' : 'translate-x-0'}`}
+                          />
+                        </button>
+                      </div>
                       <label className="block">
                         <span className="mb-1 block text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
                           BASE_URL
@@ -239,18 +310,32 @@ export default function SettingsPanel({
                         <span className="mb-1 block text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
                           MODEL
                         </span>
-                        <input
-                          data-testid="ai-model-input"
-                          value={aiWriting.model}
-                          onChange={(event) =>
-                            onAiWritingChange({
-                              ...aiWriting,
-                              model: event.currentTarget.value,
-                            })
-                          }
-                          placeholder="gpt-4o-mini"
-                          className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-[#1d1d1f] outline-none transition focus:border-[#0066cc] dark:border-white/10 dark:bg-[#1c1c1e] dark:text-[#f5f5f7]"
-                        />
+                        <div className="relative">
+                          <input
+                            data-testid="ai-model-input"
+                            value={aiWriting.model}
+                            onChange={(event) =>
+                              onAiWritingChange({
+                                ...aiWriting,
+                                model: event.currentTarget.value,
+                              })
+                            }
+                            placeholder="gpt-4o-mini"
+                            className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 pr-11 text-sm text-[#1d1d1f] outline-none transition focus:border-[#0066cc] dark:border-white/10 dark:bg-[#1c1c1e] dark:text-[#f5f5f7]"
+                          />
+                          <span
+                            data-testid="ai-model-status"
+                            data-status={aiModelStatus}
+                            title={aiModelStatusTitle}
+                            aria-label={aiModelStatusTitle}
+                            className="absolute right-4 top-1/2 inline-flex -translate-y-1/2 text-[#86868b] dark:text-[#a1a1a6]"
+                          >
+                            {aiModelStatus === 'checking' && <Loader2 size={16} className="animate-spin" />}
+                            {aiModelStatus === 'available' && <CheckCircle2 size={16} className="text-[#1f883d]" />}
+                            {aiModelStatus === 'unavailable' && <XCircle size={16} className="text-[#d1242f]" />}
+                            {aiModelStatus === 'empty' && <CircleHelp size={16} />}
+                          </span>
+                        </div>
                       </label>
                       <button
                         type="button"
