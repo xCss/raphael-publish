@@ -166,4 +166,26 @@ describe('handleSmartPaste image files', () => {
         expect(URL.createObjectURL).not.toHaveBeenCalled();
         expect(nextValue).toBe('![图片](raphael-image://draft/default/pasted-image-1)');
     });
+
+    it('suppresses clipboard image placeholders like [Image 1]', () => {
+        const textarea = document.createElement('textarea');
+        textarea.value = 'before';
+        document.body.appendChild(textarea);
+
+        const setMarkdownInput = vi.fn();
+        const event = {
+            preventDefault: vi.fn(),
+            currentTarget: textarea,
+            clipboardData: {
+                getData: vi.fn((type: string) => type === 'text/plain' ? '[Image 1]' : ''),
+                items: [],
+                files: []
+            }
+        } as unknown as React.ClipboardEvent<HTMLTextAreaElement>;
+
+        handleSmartPaste(event, setMarkdownInput);
+
+        expect(event.preventDefault).toHaveBeenCalled();
+        expect(setMarkdownInput).not.toHaveBeenCalled();
+    });
 });

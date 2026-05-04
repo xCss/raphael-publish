@@ -4,7 +4,7 @@ import 'highlight.js/styles/github.css';
 import { THEMES } from './themes';
 
 export const md = new MarkdownIt({
-    html: true,
+    html: false,
     linkify: true,
     typographer: false,
     highlight: function (str, lang) {

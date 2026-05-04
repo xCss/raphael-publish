@@ -29,6 +29,28 @@ describe('preprocessMarkdown', () => {
     });
 });
 
+describe('markdown html safety', () => {
+    it('escapes raw html instead of rendering executable elements', () => {
+        const html = renderMarkdown('<img src=x onerror="alert(1)"><script>alert(1)</script>');
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+
+        expect(doc.querySelector('script')).toBeNull();
+        expect(doc.querySelector('img')).toBeNull();
+        expect(doc.body.textContent).toContain('<img src=x onerror="alert(1)">');
+        expect(doc.body.textContent).toContain('<script>alert(1)</script>');
+    });
+
+    it('still renders standard markdown elements', () => {
+        const html = renderMarkdown('# 标题\n\n**加粗**\n\n[链接](https://example.com)\n\n![图片](https://example.com/a.png)');
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+
+        expect(doc.querySelector('h1')?.textContent).toBe('标题');
+        expect(doc.querySelector('strong')?.textContent).toBe('加粗');
+        expect(doc.querySelector('a')?.getAttribute('href')).toBe('https://example.com');
+        expect(doc.querySelector('img')?.getAttribute('src')).toBe('https://example.com/a.png');
+    });
+});
+
 describe('applyTheme', () => {
     it('groups consecutive standalone images into an image grid', () => {
         const html = '<p><img src="a.png" /></p><p><img src="b.png" /></p>';
