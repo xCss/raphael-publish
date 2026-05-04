@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { PenLine, Eye } from 'lucide-react';
 import { md, preprocessMarkdown, applyTheme } from './lib/markdown';
 import { markElementIndexes } from './lib/markdownIndexer';
-import { makeWeChatCompatible, cleanInternalAttributes } from './lib/wechatCompat';
+import { makeWeChatCompatible } from './lib/wechatCompat';
 import { THEMES } from './lib/themes';
 import { defaultContent } from './defaultContent';
 import { findImagePosition, selectTextAreaRange } from './lib/imageSelector';
@@ -18,6 +18,8 @@ import Toast from './components/Toast';
 import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
 import { cleanupOrphanDraftImages, clearPersistedDraftImages, removeDraftImageReferencesFromMarkdown, resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
 import { checkAiModelAvailability, requestAiRewrite, type AiModelAvailabilityResult, type AiRewriteAction } from './lib/aiRewrite';
+import { prepareHtmlForExport } from './lib/htmlExport';
+import { createPdfExportContainer } from './lib/pdfExport';
 
 export default function App() {
     const [preferences] = useState(() => loadPreferences(typeof window === 'undefined' ? undefined : window.localStorage, {
@@ -288,54 +290,41 @@ export default function App() {
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
             console.error('Copy failed', err);
-            alert('复制格式失败，请检查浏览器剪贴板权限');
+            alert(err instanceof Error ? err.message : '复制格式失败，请检查浏览器剪贴板权限');
         } finally {
             setIsCopying(false);
         }
     };
 
-    const handleExportHtml = () => {
-        // Clean internal attributes before exporting
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(cleanInternalAttributes(renderedHtml), 'text/html');
-        doc.querySelectorAll('img[data-original-src]').forEach((image) => {
-            const originalSrc = image.getAttribute('data-original-src');
-            if (originalSrc) image.setAttribute('src', originalSrc);
-            image.removeAttribute('data-original-src');
-        });
-
-        const blob = new Blob([doc.body.innerHTML], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Raphael_Article_${new Date().getTime()}.html`;
-        a.click();
-        URL.revokeObjectURL(url);
+    const handleExportHtml = async () => {
+        try {
+            const exportHtml = await prepareHtmlForExport(renderedHtml);
+            const blob = new Blob([exportHtml], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Raphael_Article_${new Date().getTime()}.html`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('HTML export failed', err);
+            alert(err instanceof Error ? err.message : '导出 HTML 失败，请检查图片是否可访问');
+        }
     };
 
     const handleExportPdf = async () => {
         if (!previewRef.current) return;
         const { default: html2pdf } = await import('html2pdf.js');
         const element = previewRef.current;
+        const backgroundColor = document.documentElement.classList.contains('dark') ? '#000000' : '#ffffff';
         const opt = {
             margin: 10,
             filename: `Raphael_Article_${new Date().getTime()}.pdf`,
             image: { type: 'jpeg' as const, quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: document.documentElement.classList.contains('dark') ? '#000000' : '#ffffff' },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor },
             jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const }
         };
-        const clonedElement = element.cloneNode(true) as HTMLElement;
-
-        // Clean internal attributes from cloned element for PDF export
-        const allElements = clonedElement.querySelectorAll('*');
-        allElements.forEach(el => {
-            el.removeAttribute('data-md-type');
-            el.removeAttribute('data-md-index');
-        });
-
-        const cloneContainer = document.createElement('div');
-        cloneContainer.style.background = document.documentElement.classList.contains('dark') ? '#000000' : '#ffffff';
-        cloneContainer.appendChild(clonedElement);
+        const cloneContainer = createPdfExportContainer(element, backgroundColor);
 
         document.body.appendChild(cloneContainer);
         try {

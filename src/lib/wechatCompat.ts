@@ -18,17 +18,24 @@ async function getBase64Image(imgUrl: string): Promise<string> {
         if (imgUrl.startsWith('data:')) return imgUrl;
 
         const response = await fetch(imgUrl, { mode: 'cors', cache: 'default' });
-        if (!response.ok) return imgUrl;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const blob = await response.blob();
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.onerror = () => resolve(imgUrl);
+            reader.onloadend = () => {
+                if (typeof reader.result === 'string') {
+                    resolve(reader.result);
+                    return;
+                }
+                reject(new Error('FileReader returned empty image data'));
+            };
+            reader.onerror = () => reject(new Error('FileReader failed to read image data'));
             reader.readAsDataURL(blob);
         });
-    } catch {
-        return imgUrl;
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : 'unknown error';
+        throw new Error(`图片转换失败：${imgUrl}（${detail}）`);
     }
 }
 

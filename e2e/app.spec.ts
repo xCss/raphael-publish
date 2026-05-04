@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 function buildLongMarkdown() {
     return Array.from({ length: 120 }, (_, index) => `## Section ${index + 1}\n\n这是第 ${index + 1} 段内容，用来验证编辑器和预览区的滚动同步是否稳定。\n\n`).join('');
@@ -103,6 +104,62 @@ test('renders bold text with punctuation without leaking markdown markers', asyn
     await expect(preview.locator('strong')).toHaveText('5%');
     await expect(preview).not.toContainText('**5%**');
     await expect(preview).toContainText('2025年初，伦敦黄金市场的一个月拆借利率一度升至5%。');
+});
+
+test('exports a non-blank PDF from the visible preview', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await expect(page.getByTestId('preview-content')).toContainText('Raphael Publish');
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('[data-testid="export-pdf"]:visible').click();
+    const download = await downloadPromise;
+    const pdfPath = testInfo.outputPath(download.suggestedFilename());
+    await download.saveAs(pdfPath);
+
+    const pdfBytes = await readFile(pdfPath);
+
+    expect(pdfBytes.length).toBeGreaterThan(10_000);
+});
+
+test('keeps the PDF export clone within the A4 printable width', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await expect(page.getByTestId('preview-content')).toContainText('Raphael Publish');
+
+    const widths = await page.evaluate(() => {
+        const source = document.querySelector('[data-testid="preview-content"]') as HTMLElement | null;
+        if (!source) return null;
+
+        const clone = source.cloneNode(true) as HTMLElement;
+        clone.style.width = '190mm';
+        clone.style.maxWidth = '190mm';
+        clone.style.minWidth = '0';
+        const container = document.createElement('div');
+        container.style.background = '#ffffff';
+        container.style.width = '190mm';
+        container.style.maxWidth = '190mm';
+        container.style.minWidth = '0';
+        container.appendChild(clone);
+        document.body.appendChild(container);
+
+        const cloneRect = clone.getBoundingClientRect();
+        const result = {
+            cloneWidth: cloneRect.width,
+            containerWidth: container.getBoundingClientRect().width,
+            scrollWidth: clone.scrollWidth
+        };
+
+        container.remove();
+        return result;
+    });
+
+    expect(widths).not.toBeNull();
+    expect(widths!.cloneWidth).toBeLessThanOrEqual(720);
+    expect(widths!.containerWidth).toBeLessThanOrEqual(720);
+    expect(widths!.scrollWidth).toBeLessThanOrEqual(Math.ceil(widths!.cloneWidth) + 1);
 });
 
 test('restores the local markdown draft after reload', async ({ page }) => {

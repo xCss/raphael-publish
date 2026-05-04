@@ -1,5 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { makeWeChatCompatible } from './wechatCompat';
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
+});
 
 describe('makeWeChatCompatible code blocks', () => {
     test('preserves code whitespace with explicit WeChat-safe line breaks', async () => {
@@ -129,5 +136,19 @@ describe('makeWeChatCompatible lists', () => {
         expect(inlineWrapper?.textContent).toContain('偏好记忆： 自动恢复主题、明暗模式、预览设备');
         expect(inlineWrapper?.getAttribute('style')).toContain('display: inline !important;');
         expect(Array.from(li?.childNodes || []).every(node => node.nodeType !== Node.TEXT_NODE || !(node.textContent || '').trim())).toBe(true);
+    });
+});
+
+describe('makeWeChatCompatible images', () => {
+    test('throws when a remote image cannot be embedded as base64', async () => {
+        globalThis.fetch = vi.fn(async () => ({
+            ok: false,
+            status: 403,
+            blob: async () => new Blob(['blocked'], { type: 'image/png' })
+        } as Response));
+
+        const html = '<div><p><img src="https://cdn.example.com/blocked.png" alt="blocked image"></p></div>';
+
+        await expect(makeWeChatCompatible(html, 'apple')).rejects.toThrow('图片转换失败');
     });
 });
