@@ -3,27 +3,63 @@ import hljs from 'highlight.js';
 import 'highlight.js/styles/github.css';
 import { THEMES } from './themes';
 
+function parseHexColor(input: string): { r: number; g: number; b: number } | null {
+    const match = input.match(/#([0-9a-fA-F]{6})/);
+    if (!match) return null;
+
+    const value = match[1];
+    return {
+        r: Number.parseInt(value.slice(0, 2), 16),
+        g: Number.parseInt(value.slice(2, 4), 16),
+        b: Number.parseInt(value.slice(4, 6), 16),
+    };
+}
+
+function isDarkThemeStyle(containerStyle: string): boolean {
+    const bgMatch = containerStyle.match(/background-color:\s*([^;]+);/i);
+    if (!bgMatch) return false;
+
+    const color = parseHexColor(bgMatch[1]);
+    if (!color) return false;
+
+    const luminance = (0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) / 255;
+    return luminance < 0.45;
+}
+
+function extractBackgroundColor(style: string): string | null {
+    const bgMatch = style.match(/background-color:\s*(#[0-9a-fA-F]{6})/i);
+    return bgMatch ? bgMatch[1] : null;
+}
+
+function highlightCode(str: string, lang?: string) {
+    if (lang && hljs.getLanguage(lang)) {
+        try {
+            return hljs.highlight(str, { language: lang }).value;
+        } catch {
+            return md.utils.escapeHtml(str);
+        }
+    }
+
+    return md.utils.escapeHtml(str);
+}
+
 export const md = new MarkdownIt({
     html: false,
     linkify: true,
     typographer: false,
-    highlight: function (str, lang) {
-        let codeContent = '';
-        if (lang && hljs.getLanguage(lang)) {
-            try {
-                codeContent = hljs.highlight(str, { language: lang }).value;
-            } catch {
-                codeContent = md.utils.escapeHtml(str);
-            }
-        } else {
-            codeContent = md.utils.escapeHtml(str);
-        }
-
-        const dots = '<div style="margin-bottom: 12px; white-space: nowrap;"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #ff5f56; margin-right: 6px;"></span><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e; margin-right: 6px;"></span><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #27c93f;"></span></div>';
-
-        return `<pre>${dots}<code class="hljs">${codeContent}</code></pre>`;
-    }
+    highlight: highlightCode
 });
+
+md.renderer.rules.fence = (tokens, idx) => {
+    const token = tokens[idx];
+    const info = token.info ? token.info.trim() : '';
+    const langName = info ? info.split(/\s+/g)[0] : '';
+    const codeContent = highlightCode(token.content, langName);
+    const languageClass = langName ? ` language-${md.utils.escapeHtml(langName)}` : '';
+    const dots = '<section data-code-dots="mac"><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; border: 1px solid rgba(0,0,0,0.10); box-sizing: border-box;"></span><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #febc2e; border: 1px solid rgba(0,0,0,0.10); box-sizing: border-box;"></span><span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: #28c840; border: 1px solid rgba(0,0,0,0.10); box-sizing: border-box;"></span></section>';
+
+    return `<section data-code-shell="mac">${dots}<pre><code class="hljs${languageClass}">${codeContent}</code></pre></section>`;
+};
 
 // Avoid bold fragmentation when pasting from certain apps
 export function preprocessMarkdown(content: string) {
@@ -45,6 +81,12 @@ export function preprocessMarkdown(content: string) {
 export function applyTheme(html: string, themeId: string) {
     const theme = THEMES.find(t => t.id === themeId) || THEMES[0];
     const style = theme.styles;
+    const darkShell = isDarkThemeStyle(style.container);
+    const shellBg = extractBackgroundColor(style.pre) || (darkShell ? '#1a1a1a' : '#ffffff');
+    const shellBorder = darkShell ? '#2f3136' : '#d1d5db';
+    const shellHeaderStart = darkShell ? '#2b2d31' : '#fbfbfc';
+    const shellHeaderEnd = darkShell ? '#1f2125' : '#eceef1';
+    const codeTextColor = darkShell ? '#f8f8f2' : 'inherit';
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -218,13 +260,34 @@ export function applyTheme(html: string, themeId: string) {
         'hljs-attr': 'color: #6f42c1;',
     };
 
+    const hljsDark: Record<string, string> = {
+        'hljs-comment': 'color: #7f8c98; font-style: normal;',
+        'hljs-quote': 'color: #7f8c98; font-style: normal;',
+        'hljs-keyword': 'color: #ff5370; font-weight: 600;',
+        'hljs-selector-tag': 'color: #ff5370; font-weight: 600;',
+        'hljs-string': 'color: #c3e88d;',
+        'hljs-title': 'color: #c792ea; font-weight: 600;',
+        'hljs-section': 'color: #c792ea; font-weight: 600;',
+        'hljs-type': 'color: #82aaff; font-weight: 600;',
+        'hljs-number': 'color: #f78c6c;',
+        'hljs-literal': 'color: #f78c6c;',
+        'hljs-built_in': 'color: #82aaff;',
+        'hljs-variable': 'color: #ffcb6b;',
+        'hljs-template-variable': 'color: #ffcb6b;',
+        'hljs-tag': 'color: #89ddff;',
+        'hljs-name': 'color: #89ddff;',
+        'hljs-attr': 'color: #c792ea;',
+    };
+
+    const hljsTheme = darkShell ? hljsDark : hljsLight;
+
     const codeTokens = doc.querySelectorAll('.hljs span');
     codeTokens.forEach(span => {
         let inlineStyle = span.getAttribute('style') || '';
         if (inlineStyle && !inlineStyle.endsWith(';')) inlineStyle += '; ';
         span.classList.forEach(cls => {
-            if (hljsLight[cls]) {
-                inlineStyle += hljsLight[cls] + '; ';
+            if (hljsTheme[cls]) {
+                inlineStyle += hljsTheme[cls] + '; ';
             }
         });
         if (inlineStyle) {
@@ -234,6 +297,16 @@ export function applyTheme(html: string, themeId: string) {
 
     doc.querySelectorAll('pre').forEach(pre => {
         const currentStyle = pre.getAttribute('style') || '';
+        const isInMacShell = Boolean(pre.closest('[data-code-shell="mac"]'));
+        if (isInMacShell) {
+            const fontSize = currentStyle.match(/font-size:\s*[^;]+;/i)?.[0] || '';
+            const lineHeight = currentStyle.match(/line-height:\s*[^;]+;/i)?.[0] || '';
+            pre.setAttribute(
+                'style',
+                `margin: 0 !important; padding: 0 !important; background-color: transparent !important; border: none !important; border-radius: 0 !important; overflow-x: auto; ${fontSize} ${lineHeight} font-variant-ligatures: none; tab-size: 2;`
+            );
+            return;
+        }
         pre.setAttribute(
             'style',
             `${currentStyle}; font-variant-ligatures: none; tab-size: 2;`
@@ -242,9 +315,13 @@ export function applyTheme(html: string, themeId: string) {
 
     doc.querySelectorAll('pre code, pre .hljs, .hljs').forEach(codeNode => {
         const currentStyle = codeNode.getAttribute('style') || '';
+        const isInMacShell = Boolean(codeNode.closest('[data-code-shell="mac"]'));
+        const shellCodeStyle = isInMacShell
+            ? 'padding: 16px 18px 18px 18px !important; box-sizing: border-box; background: transparent !important; background-color: transparent !important;'
+            : '';
         codeNode.setAttribute(
             'style',
-            `${currentStyle}; display: block; font-size: inherit !important; line-height: inherit !important; font-style: normal !important; white-space: pre; word-break: normal; overflow-wrap: normal;`
+            `${currentStyle}; display: block; ${shellCodeStyle} color: ${codeTextColor} !important; font-size: inherit !important; line-height: inherit !important; font-style: normal !important; white-space: pre; word-break: normal; overflow-wrap: normal;`
         );
     });
 
@@ -256,6 +333,20 @@ export function applyTheme(html: string, themeId: string) {
                 node.setAttribute('style', `${node.getAttribute('style') || ''}; ${override}`);
             });
         });
+    });
+
+    doc.querySelectorAll('[data-code-shell="mac"]').forEach(shell => {
+        shell.setAttribute(
+            'style',
+            `display: block; width: 100%; margin: 0; box-sizing: border-box; overflow: hidden; border-radius: 12px; border: 1px solid ${shellBorder}; background-color: ${shellBg} !important; box-shadow: none;`
+        );
+    });
+
+    doc.querySelectorAll('[data-code-dots="mac"]').forEach(dots => {
+        dots.setAttribute(
+            'style',
+            `height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 7px; background: linear-gradient(180deg, ${shellHeaderStart} 0%, ${shellHeaderEnd} 100%); border-bottom: 1px solid ${shellBorder}; box-sizing: border-box; white-space: nowrap;`
+        );
     });
 
     // Unify image look-and-feel across themes.

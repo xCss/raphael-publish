@@ -1,5 +1,6 @@
 import { describe, test, expect } from 'vitest';
 import { findElementPosition } from './markdownLocator';
+import { markElementIndexes } from './markdownIndexer';
 
 describe('findElementPosition - 全局索引定位', () => {
   const markdownText = `# 一级标题
@@ -255,5 +256,21 @@ const x = 1;
       expect(matchedText).toContain('这是一个带链接的段落');
       expect(matchedText).toContain('[这里有个链接](https://example.com)');
     });
+  });
+});
+
+describe('markElementIndexes', () => {
+  test('removes padding, border, and background from indexed code pre elements', () => {
+    const html = '<div><pre style="margin: 24px 0; padding: 20px; background-color: #f5f5f7 !important; border: 1px solid #ddd;"><code>const x = 1;</code></pre></div>';
+    const indexed = markElementIndexes(html);
+    const doc = new DOMParser().parseFromString(indexed, 'text/html');
+    const pre = doc.querySelector('pre[data-md-type="code"]');
+    const preStyle = pre?.getAttribute('style') || '';
+
+    expect(pre).not.toBeNull();
+    expect(preStyle).toContain('padding: 0 !important;');
+    expect(preStyle).not.toContain('padding: 20px;');
+    expect(preStyle).not.toContain('background-color: #f5f5f7');
+    expect(preStyle).not.toContain('border: 1px solid #ddd;');
   });
 });

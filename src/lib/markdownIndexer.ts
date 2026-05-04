@@ -38,6 +38,20 @@ export function markElementIndexes(html: string): string {
     el.setAttribute('data-md-index', String(elementCount++));
   };
 
+  const removeStyleProperty = (style: string, property: string) => {
+    const pattern = new RegExp(`${property}\\s*:\\s*[^;]+;?`, 'gi');
+    return style.replace(pattern, '').trim();
+  };
+
+  const removeCodePrePadding = (el: Element) => {
+    const currentStyle = el.getAttribute('style') || '';
+    const cleanedStyle = ['padding', 'background', 'background-color', 'border'].reduce(
+      (style, property) => removeStyleProperty(style, property),
+      currentStyle
+    );
+    el.setAttribute('style', `${cleanedStyle}; padding: 0 !important; background: transparent !important; background-color: transparent !important; border: none !important;`);
+  };
+
   // Get all body children to traverse in document order
   const bodyChildren = Array.from(doc.body.children);
 
@@ -110,6 +124,7 @@ export function markElementIndexes(html: string): string {
     // Code block
     else if (tagName === 'pre') {
       markElement(el, 'code');
+      removeCodePrePadding(el);
     }
     // Table: mark each tr (not table) - 粒度与 markdownLocator 一致
     else if (tagName === 'table') {
