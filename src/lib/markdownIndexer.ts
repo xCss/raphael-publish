@@ -126,6 +126,14 @@ export function markElementIndexes(html: string): string {
       markElement(el, 'code');
       removeCodePrePadding(el);
     }
+    // Mac shell code block: renderer wraps the actual pre in a section.
+    else if (el.getAttribute('data-code-shell') === 'mac') {
+      const pre = el.querySelector(':scope > pre');
+      if (pre) {
+        markElement(pre, 'code');
+        removeCodePrePadding(pre);
+      }
+    }
     // Table: mark each tr (not table) - 粒度与 markdownLocator 一致
     else if (tagName === 'table') {
       const rows = el.querySelectorAll('tr');

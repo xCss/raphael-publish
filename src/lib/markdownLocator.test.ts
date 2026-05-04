@@ -273,4 +273,18 @@ describe('markElementIndexes', () => {
     expect(preStyle).not.toContain('background-color: #f5f5f7');
     expect(preStyle).not.toContain('border: 1px solid #ddd;');
   });
+
+  test('marks nested mac shell pre elements as code blocks', () => {
+    const html = '<div><section data-code-shell="mac"><section data-code-dots="mac"></section><pre style="padding: 20px; background-color: #f5f5f7 !important; border: 1px solid #ddd;"><code>const x = 1;</code></pre></section></div>';
+    const indexed = markElementIndexes(html);
+    const doc = new DOMParser().parseFromString(indexed, 'text/html');
+    const pre = doc.querySelector('[data-code-shell="mac"] pre[data-md-type="code"]');
+    const preStyle = pre?.getAttribute('style') || '';
+
+    expect(pre).not.toBeNull();
+    expect(pre?.getAttribute('data-md-index')).toBe('0');
+    expect(preStyle).toContain('padding: 0 !important;');
+    expect(preStyle).not.toContain('background-color: #f5f5f7');
+    expect(preStyle).not.toContain('border: 1px solid #ddd;');
+  });
 });
