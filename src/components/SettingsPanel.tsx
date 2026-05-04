@@ -10,6 +10,8 @@ interface SettingsPanelProps {
   onPersistPastedImagesChange: (enabled: boolean) => void;
   keepImageReferencesOnDisable: boolean;
   onKeepImageReferencesOnDisableChange: (enabled: boolean) => void;
+  scrollSyncEnabled: boolean;
+  onScrollSyncEnabledChange: (enabled: boolean) => void;
   relayAiRequests: boolean;
   onRelayAiRequestsChange: (enabled: boolean) => void;
   aiWriting: {
@@ -63,6 +65,8 @@ export default function SettingsPanel({
   onPersistPastedImagesChange,
   keepImageReferencesOnDisable,
   onKeepImageReferencesOnDisableChange,
+  scrollSyncEnabled,
+  onScrollSyncEnabledChange,
   relayAiRequests,
   onRelayAiRequestsChange,
   aiWriting,
@@ -165,6 +169,33 @@ export default function SettingsPanel({
             </div>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4 sm:px-6">
+              <section className="rounded-2xl border border-black/10 bg-[#f5f5f7]/80 p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="flex items-center justify-between gap-4 rounded-2xl bg-white/80 p-4 shadow-sm dark:bg-[#2c2c2e]/80">
+                  <label htmlFor="scroll-sync-toggle" className="min-w-0 flex-1">
+                    <span className="block text-sm font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">
+                      滚动同步
+                    </span>
+                    <span className="mt-1 block text-[12px] leading-5 text-[#86868b] dark:text-[#a1a1a6]">
+                      编辑器与预览区会保持相近阅读位置，默认开启。
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    id="scroll-sync-toggle"
+                    data-testid="settings-scroll-sync-toggle"
+                    role="switch"
+                    aria-checked={scrollSyncEnabled}
+                    aria-label="滚动同步"
+                    onClick={() => onScrollSyncEnabledChange(!scrollSyncEnabled)}
+                    className={`relative h-6 w-14 shrink-0 overflow-hidden rounded-full transition-colors ${scrollSyncEnabled ? 'bg-[#0066cc] dark:bg-[#0a84ff]' : 'bg-black/15 dark:bg-white/20'}`}
+                  >
+                    <span
+                      className={`absolute left-1 top-1 h-4 w-6 rounded-full bg-white shadow-sm transition-transform ${scrollSyncEnabled ? 'translate-x-6' : 'translate-x-0'}`}
+                    />
+                  </button>
+                </div>
+              </section>
+
               {sections.map((section) => (
                 <section
                   key={section.title}

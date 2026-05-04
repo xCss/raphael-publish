@@ -454,6 +454,8 @@ export default function App() {
                 onPersistPastedImagesChange={handlePersistPastedImagesChange}
                 keepImageReferencesOnDisable={keepImageReferencesOnDisable}
                 onKeepImageReferencesOnDisableChange={setKeepImageReferencesOnDisable}
+                scrollSyncEnabled={scrollSyncEnabled}
+                onScrollSyncEnabledChange={setScrollSyncEnabled}
                 relayAiRequests={relayAiRequests}
                 onRelayAiRequestsChange={setRelayAiRequests}
                 aiWriting={aiWriting}
@@ -493,8 +495,6 @@ export default function App() {
                     onCopy={handleCopy}
                     copied={copied}
                     isCopying={isCopying}
-                    scrollSyncEnabled={scrollSyncEnabled}
-                    onToggleScrollSync={() => setScrollSyncEnabled((prev) => !prev)}
                 />
             </div>
 
@@ -511,8 +511,6 @@ export default function App() {
                     onCopy={handleCopy}
                     copied={copied}
                     isCopying={isCopying}
-                    scrollSyncEnabled={scrollSyncEnabled}
-                    onToggleScrollSync={() => setScrollSyncEnabled((prev) => !prev)}
                 />
             </div>
 

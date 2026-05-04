@@ -1,15 +1,35 @@
-.DS_Store
-*.bak*
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 dev-dist/
+*.tsbuildinfo
+
+# Test output
+coverage/
 playwright-report/
 test-results/
+
+# Agent/tool local state
 .codex*
-*.tsbuildinfo
+.omx/
+.claude
+.opencode
+
+# Logs
 *.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE files
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+
+# Temporary/backups
+*.bak*

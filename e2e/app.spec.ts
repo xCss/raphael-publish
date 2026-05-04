@@ -193,12 +193,34 @@ test('opens settings without replacing the split editor and preview workspace', 
     await expect(page.getByRole('heading', { name: '设置' })).toBeVisible();
     await expect(panel.getByRole('heading', { name: 'Drafts & Images' })).toBeVisible();
     await expect(panel.getByRole('heading', { name: 'AI Writing' })).toBeVisible();
+    await expect(panel.getByRole('switch', { name: '滚动同步' })).toBeChecked();
     await expect(page.getByText('Quality Checks')).toBeHidden();
+    await expect(page.locator('[data-testid="scroll-sync-toggle"]')).toHaveCount(0);
     await expect(page.getByTestId('editor-input')).toBeVisible();
     await expect(page.getByTestId('preview-content')).toBeVisible();
 
     await page.getByTestId('settings-close').click();
     await expect(panel).toBeHidden();
+});
+
+test('controls scroll sync from settings and persists preference', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await expect(page.locator('[data-testid="scroll-sync-toggle"]')).toHaveCount(0);
+
+    await page.getByTestId('settings-button').click();
+    const toggle = page.getByRole('switch', { name: '滚动同步' });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toBeChecked();
+
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+
+    await page.reload();
+    await page.getByTestId('settings-button').click();
+
+    await expect(page.getByRole('switch', { name: '滚动同步' })).not.toBeChecked();
 });
 
 test('opens settings as a mobile sheet', async ({ page }) => {
