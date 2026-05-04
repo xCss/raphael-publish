@@ -47,7 +47,7 @@ export function loadMarkdownDraft(storage: Storage | undefined, fallback: string
 
     try {
         const savedDraft = storage.getItem(MARKDOWN_DRAFT_STORAGE_KEY);
-        return savedDraft === null ? fallback : savedDraft;
+        return savedDraft === null || savedDraft.trim().length === 0 ? fallback : savedDraft;
     } catch {
         return fallback;
     }
@@ -57,7 +57,13 @@ export function saveMarkdownDraft(storage: Storage | undefined, draft: string) {
     if (!canUseStorage(storage)) return false;
 
     try {
-        storage.setItem(MARKDOWN_DRAFT_STORAGE_KEY, draft.replace(blobImageMarkdownPattern, '').trimEnd());
+        const restorableDraft = draft.replace(blobImageMarkdownPattern, '').trimEnd();
+        if (restorableDraft.trim().length === 0) {
+            storage.removeItem(MARKDOWN_DRAFT_STORAGE_KEY);
+            return true;
+        }
+
+        storage.setItem(MARKDOWN_DRAFT_STORAGE_KEY, restorableDraft);
         return true;
     } catch {
         return false;

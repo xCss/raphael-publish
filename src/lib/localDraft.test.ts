@@ -17,6 +17,14 @@ describe('local draft persistence', () => {
         expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('fallback');
     });
 
+    test('uses fallback content instead of persisting an empty draft', () => {
+        localStorage.clear();
+
+        expect(saveMarkdownDraft(localStorage, '   \n\n')).toBe(true);
+        expect(localStorage.getItem(MARKDOWN_DRAFT_STORAGE_KEY)).toBeNull();
+        expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('fallback');
+    });
+
     test('saves and restores markdown draft text', () => {
         localStorage.clear();
 
