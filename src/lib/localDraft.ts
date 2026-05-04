@@ -16,6 +16,8 @@ export interface StoredPreferences {
     previewDevice: PreviewDevice;
     scrollSyncEnabled: boolean;
     persistPastedImages: boolean;
+    keepImageReferencesOnDisable: boolean;
+    relayAiRequests: boolean;
     aiWriting: AiWritingPreferences;
 }
 
@@ -25,6 +27,8 @@ export const DEFAULT_PREFERENCES: StoredPreferences = {
     previewDevice: 'pc',
     scrollSyncEnabled: true,
     persistPastedImages: false,
+    keepImageReferencesOnDisable: true,
+    relayAiRequests: true,
     aiWriting: {
         baseUrl: '',
         apiKey: '',
@@ -92,6 +96,8 @@ export function normalizePreferences(value: unknown, fallback: StoredPreferences
         previewDevice: isPreviewDevice(value.previewDevice) ? value.previewDevice : fallback.previewDevice,
         scrollSyncEnabled: typeof value.scrollSyncEnabled === 'boolean' ? value.scrollSyncEnabled : fallback.scrollSyncEnabled,
         persistPastedImages: typeof value.persistPastedImages === 'boolean' ? value.persistPastedImages : fallback.persistPastedImages,
+        keepImageReferencesOnDisable: typeof value.keepImageReferencesOnDisable === 'boolean' ? value.keepImageReferencesOnDisable : fallback.keepImageReferencesOnDisable,
+        relayAiRequests: typeof value.relayAiRequests === 'boolean' ? value.relayAiRequests : fallback.relayAiRequests,
         aiWriting: normalizeAiWritingPreferences(value.aiWriting, fallback.aiWriting)
     };
 }

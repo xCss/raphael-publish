@@ -63,6 +63,8 @@ describe('local draft persistence', () => {
                 previewDevice: 'watch',
                 scrollSyncEnabled: false,
                 persistPastedImages: true,
+                keepImageReferencesOnDisable: false,
+                relayAiRequests: false,
                 aiWriting: {
                     baseUrl: 'https://api.example.com/v1',
                     apiKey: 42,
@@ -74,6 +76,8 @@ describe('local draft persistence', () => {
             themeMode: 'dark',
             scrollSyncEnabled: false,
             persistPastedImages: true,
+            keepImageReferencesOnDisable: false,
+            relayAiRequests: false,
             aiWriting: {
                 baseUrl: 'https://api.example.com/v1',
                 apiKey: '',
@@ -90,6 +94,8 @@ describe('local draft persistence', () => {
             previewDevice: 'mobile' as const,
             scrollSyncEnabled: false,
             persistPastedImages: true,
+            keepImageReferencesOnDisable: false,
+            relayAiRequests: false,
             aiWriting: {
                 baseUrl: 'https://api.example.com/v1',
                 apiKey: 'local-key',

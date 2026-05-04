@@ -35,6 +35,11 @@ export interface DraftImageRecord {
     lastUsedAt: number;
 }
 
+export interface ResolvedDraftImageHtml {
+    html: string;
+    objectUrls: string[];
+}
+
 function getIndexedDB(): IDBFactory | undefined {
     return typeof indexedDB === 'undefined' ? undefined : indexedDB;
 }
@@ -79,6 +84,60 @@ function readImageRecord(database: IDBDatabase, imageId: string) {
     });
 }
 
+function deleteImageRecord(database: IDBDatabase, imageId: string) {
+    return new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(IMAGE_STORE_NAME, 'readwrite');
+        transaction.objectStore(IMAGE_STORE_NAME).delete(imageId);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error ?? new Error('Failed to delete pasted image'));
+        transaction.onabort = () => reject(transaction.error ?? new Error('Image deletion was aborted'));
+    });
+}
+
+function clearImageStore(database: IDBDatabase) {
+    return new Promise<void>((resolve, reject) => {
+        const transaction = database.transaction(IMAGE_STORE_NAME, 'readwrite');
+        transaction.objectStore(IMAGE_STORE_NAME).clear();
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error ?? new Error('Failed to clear pasted images'));
+        transaction.onabort = () => reject(transaction.error ?? new Error('Image store clearing was aborted'));
+    });
+}
+
+function listDraftImageRecords(database: IDBDatabase, draftId: string) {
+    return new Promise<DraftImageRecord[]>((resolve, reject) => {
+        const transaction = database.transaction(IMAGE_STORE_NAME, 'readonly');
+        const index = transaction.objectStore(IMAGE_STORE_NAME).index('draftId');
+        const request = index.getAll(draftId);
+        request.onsuccess = () => resolve((request.result as DraftImageRecord[] | undefined) ?? []);
+        request.onerror = () => reject(request.error ?? new Error('Failed to list pasted images'));
+        transaction.onerror = () => reject(transaction.error ?? new Error('Failed to list pasted images'));
+    });
+}
+
+export function collectDraftImageReferenceIds(markdown: string, draftId = 'default') {
+    const imageIds = new Set<string>();
+    const referencePattern = /raphael-image:\/\/draft\/[^\s)"'<>]+/g;
+    for (const match of markdown.matchAll(referencePattern)) {
+        const parts = getDraftImageReferenceParts(match[0]);
+        if (parts?.draftId === draftId) imageIds.add(parts.imageId);
+    }
+    return imageIds;
+}
+
+export function removeDraftImageReferencesFromMarkdown(markdown: string, draftId = 'default') {
+    const lines = markdown.split(/\r?\n/);
+    const filteredLines = lines.filter((line) => {
+        const match = line.match(/^!\[[^\]]*\]\((raphael-image:\/\/draft\/[^)\s]+)\)$/);
+        if (!match) return true;
+
+        const parts = getDraftImageReferenceParts(match[1]);
+        return parts?.draftId !== draftId;
+    });
+
+    return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
+}
+
 export async function persistDraftImage(file: File, draftId = 'default') {
     const imageId = `pasted-${Date.now()}-${crypto.randomUUID()}`;
     const now = Date.now();
@@ -101,6 +160,28 @@ export async function persistDraftImage(file: File, draftId = 'default') {
     return createDraftImageReference(draftId, imageId);
 }
 
+export async function clearPersistedDraftImages() {
+    const database = await openImageDatabase();
+    try {
+        await clearImageStore(database);
+    } finally {
+        database.close();
+    }
+}
+
+export async function cleanupOrphanDraftImages(markdown: string, draftId = 'default') {
+    const referencedImageIds = collectDraftImageReferenceIds(markdown, draftId);
+    const database = await openImageDatabase();
+    try {
+        const records = await listDraftImageRecords(database, draftId);
+        const orphanRecords = records.filter((record) => !referencedImageIds.has(record.id));
+        await Promise.all(orphanRecords.map((record) => deleteImageRecord(database, record.id)));
+        return orphanRecords.length;
+    } finally {
+        database.close();
+    }
+}
+
 export async function resolveDraftImageReferenceToObjectUrl(reference: string) {
     const parts = getDraftImageReferenceParts(reference);
     if (!parts) return null;
@@ -117,10 +198,11 @@ export async function resolveDraftImageReferenceToObjectUrl(reference: string) {
 export async function resolveDraftImageReferencesInHtml(
     html: string,
     resolveReference: (reference: string) => Promise<string | null>
-) {
+): Promise<ResolvedDraftImageHtml> {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     const images = Array.from(doc.querySelectorAll('img'));
+    const objectUrls: string[] = [];
 
     await Promise.all(images.map(async (image) => {
         const source = image.getAttribute('src') || '';
@@ -131,7 +213,8 @@ export async function resolveDraftImageReferencesInHtml(
 
         image.setAttribute('data-original-src', source);
         image.setAttribute('src', resolvedSource);
+        if (resolvedSource.startsWith('blob:')) objectUrls.push(resolvedSource);
     }));
 
-    return doc.body.innerHTML;
+    return { html: doc.body.innerHTML, objectUrls };
 }
