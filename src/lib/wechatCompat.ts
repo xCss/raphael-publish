@@ -32,6 +32,81 @@ async function getBase64Image(imgUrl: string): Promise<string> {
     }
 }
 
+function preserveCodeWhitespaceForWeChat(doc: Document, codeElement: Element) {
+    const convertTextNode = (textNode: Text) => {
+        const text = textNode.textContent || '';
+        const fragment = doc.createDocumentFragment();
+        const lines = text.split('\n');
+
+        lines.forEach((line, index) => {
+            if (index > 0) fragment.appendChild(doc.createElement('br'));
+            if (line.length > 0) {
+                fragment.appendChild(doc.createTextNode(line.replace(/ /g, '\u00a0')));
+            }
+        });
+
+        textNode.parentNode?.replaceChild(fragment, textNode);
+    };
+
+    const walk = (node: Node) => {
+        Array.from(node.childNodes).forEach(child => {
+            if (child.nodeType === Node.TEXT_NODE) {
+                convertTextNode(child as Text);
+                return;
+            }
+            walk(child);
+        });
+    };
+
+    walk(codeElement);
+}
+
+function wrapCodeLinesForWeChat(doc: Document, codeElement: Element) {
+    const nodes = Array.from(codeElement.childNodes);
+    if (nodes.some(node => node.nodeType === Node.ELEMENT_NODE && (node as Element).getAttribute('data-code-line') === 'wechat')) return;
+
+    codeElement.textContent = '';
+    let currentLine = doc.createElement('span');
+    currentLine.setAttribute('data-code-line', 'wechat');
+    currentLine.setAttribute('style', `display: inline-block; min-width: max-content; ${noWrapOverride}`);
+    codeElement.appendChild(currentLine);
+
+    const appendNewLine = () => {
+        codeElement.appendChild(doc.createElement('br'));
+        currentLine = doc.createElement('span');
+        currentLine.setAttribute('data-code-line', 'wechat');
+        currentLine.setAttribute('style', `display: inline-block; min-width: max-content; ${noWrapOverride}`);
+        codeElement.appendChild(currentLine);
+    };
+
+    nodes.forEach(node => {
+        if (node.nodeName === 'BR') {
+            appendNewLine();
+            return;
+        }
+        currentLine.appendChild(node);
+    });
+}
+
+function removeInlineStyleProperty(style: string, property: string) {
+    const pattern = new RegExp(`${property}\\s*:\\s*[^;]+;?`, 'gi');
+    return style.replace(pattern, '').trim();
+}
+
+function cleanCodeScrollLayerStyle(style: string) {
+    return ['border', 'background', 'background-color'].reduce(
+        (currentStyle, property) => removeInlineStyleProperty(currentStyle, property),
+        style
+    );
+}
+
+const noWrapOverride = 'white-space: nowrap !important; word-break: keep-all !important; overflow-wrap: normal !important; word-wrap: normal !important;';
+
+function appendNoWrapStyle(element: Element) {
+    const currentStyle = element.getAttribute('style') || '';
+    element.setAttribute('style', `${currentStyle}; ${noWrapOverride}`.trim());
+}
+
 export async function makeWeChatCompatible(html: string, themeId: string): Promise<string> {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
@@ -128,6 +203,17 @@ export async function makeWeChatCompatible(html: string, themeId: string): Promi
                 p.parentNode?.replaceChild(span, p);
             });
         }
+
+        const stillHasBlockChildren = Array.from(li.children).some(child =>
+            ['P', 'DIV', 'UL', 'OL', 'BLOCKQUOTE', 'SECTION'].includes(child.tagName)
+        );
+        if (!stillHasBlockChildren && !li.querySelector(':scope > span[data-list-inline="wechat"]')) {
+            const inlineWrapper = doc.createElement('span');
+            inlineWrapper.setAttribute('data-list-inline', 'wechat');
+            inlineWrapper.setAttribute('style', 'display: inline !important; white-space: normal !important; word-break: normal !important; overflow-wrap: normal !important; word-wrap: normal !important;');
+            Array.from(li.childNodes).forEach(child => inlineWrapper.appendChild(child));
+            li.appendChild(inlineWrapper);
+        }
     });
 
     // 4. Force Inheritance
@@ -181,6 +267,59 @@ export async function makeWeChatCompatible(html: string, themeId: string): Promi
         } else {
             next.parentNode?.removeChild(next);
         }
+    });
+
+    section.querySelectorAll('pre code').forEach(codeElement => {
+        preserveCodeWhitespaceForWeChat(doc, codeElement);
+
+        const shellElement = codeElement.closest('[data-code-shell="mac"]');
+        if (shellElement) {
+            const shellStyle = shellElement.getAttribute('style') || '';
+            shellElement.setAttribute(
+                'style',
+                `${shellStyle}; width: 100% !important; max-width: 100% !important; box-sizing: border-box; overflow: hidden; ${noWrapOverride}`.trim()
+            );
+
+            const dotsElement = shellElement.querySelector('[data-code-dots="mac"]');
+            if (dotsElement) {
+                const dotColors = ['#ff5f57', '#febc2e', '#28c840'];
+                dotsElement.innerHTML = '';
+                dotColors.forEach(color => {
+                    const dot = doc.createElement('span');
+                    dot.textContent = '●';
+                    dot.setAttribute('style', `color: ${color} !important; font-size: 22px; line-height: 1; display: inline-block; margin: 0 !important; padding: 0 !important; ${noWrapOverride}`);
+                    dotsElement.appendChild(dot);
+                });
+                const dotsStyle = dotsElement.getAttribute('style') || '';
+                dotsElement.setAttribute('style', `${dotsStyle}; gap: 0 !important; column-gap: 0 !important;`.trim());
+                appendNoWrapStyle(dotsElement);
+            }
+        }
+
+        const preElement = codeElement.closest('pre');
+        if (preElement) {
+            const preStyle = cleanCodeScrollLayerStyle(preElement.getAttribute('style') || '');
+            preElement.setAttribute(
+                'style',
+                `${preStyle}; width: 100% !important; max-width: 100% !important; box-sizing: border-box; white-space: pre !important; word-break: keep-all !important; overflow-wrap: normal !important; word-wrap: normal !important; overflow-x: auto; overflow-y: hidden; border: none !important; background: transparent !important; background-color: transparent !important;`.trim()
+            );
+        }
+
+        const currentStyle = cleanCodeScrollLayerStyle(codeElement.getAttribute('style') || '');
+        codeElement.setAttribute(
+            'style',
+            `${currentStyle}; display: inline-block; min-width: max-content; white-space: nowrap !important; word-break: keep-all !important; overflow-wrap: normal !important; word-wrap: normal !important; border: none !important; background: transparent !important; background-color: transparent !important;`.trim()
+        );
+
+        codeElement.querySelectorAll('span').forEach(span => {
+            const spanStyle = span.getAttribute('style') || '';
+            span.setAttribute(
+                'style',
+                `${spanStyle}; white-space: nowrap !important; word-break: keep-all !important; overflow-wrap: normal !important; word-wrap: normal !important;`.trim()
+            );
+        });
+
+        wrapCodeLinesForWeChat(doc, codeElement);
     });
 
     // 5. Convert all images to Base64 for safe WeChat pasting
