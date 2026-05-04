@@ -2,16 +2,60 @@ import type { AiWritingPreferences } from './localDraft';
 
 export type AiRewriteAction = 'format' | 'expand' | 'rewrite';
 
+export const RELAYX_BASE_URL = 'https://relayx.bax.workers.dev';
+
 interface RequestAiRewriteOptions {
     aiWriting: AiWritingPreferences;
     action: AiRewriteAction;
     selectedText: string;
     context: string;
+    relayAiRequests?: boolean;
     fetchImpl?: typeof fetch;
 }
 
+interface CheckAiModelAvailabilityOptions {
+    aiWriting: AiWritingPreferences;
+    relayAiRequests?: boolean;
+    fetchImpl?: typeof fetch;
+}
+
+export type AiModelAvailabilityResult = {
+    ok: boolean;
+    message: string;
+};
+
+function isLocalDevelopmentHost(hostname: string) {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
 function normalizeBaseUrl(baseUrl: string) {
-    return baseUrl.replace(/\/+$/, '');
+    let url: URL;
+    try {
+        url = new URL(baseUrl.trim());
+    } catch {
+        throw new Error('AI BASE_URL 必须是有效的 URL');
+    }
+
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLocalDevelopmentHost(url.hostname))) {
+        throw new Error('AI BASE_URL 需要使用 HTTPS（本地 localhost 开发除外）');
+    }
+
+    url.pathname = url.pathname.replace(/\/+$/, '');
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/+$/, '');
+}
+
+export function wrapBaseUrlWithRelayx(baseUrl: string) {
+    const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+    if (normalizedBaseUrl.startsWith(`${RELAYX_BASE_URL}/`)) {
+        return normalizedBaseUrl;
+    }
+    return `${RELAYX_BASE_URL}/${normalizedBaseUrl}`;
+}
+
+function getAiRequestBaseUrl(baseUrl: string, relayAiRequests: boolean) {
+    return relayAiRequests ? wrapBaseUrlWithRelayx(baseUrl) : normalizeBaseUrl(baseUrl);
 }
 
 function getActionInstruction(action: AiRewriteAction) {
@@ -29,13 +73,15 @@ export async function requestAiRewrite({
     action,
     selectedText,
     context,
+    relayAiRequests = false,
     fetchImpl = fetch
 }: RequestAiRewriteOptions) {
     if (!aiWriting.baseUrl.trim() || !aiWriting.apiKey.trim() || !aiWriting.model.trim()) {
         throw new Error('请先配置 AI Writing 的 BASE_URL、API_KEY 和 MODEL');
     }
 
-    const response = await fetchImpl(`${normalizeBaseUrl(aiWriting.baseUrl)}/chat/completions`, {
+    const baseUrl = getAiRequestBaseUrl(aiWriting.baseUrl, relayAiRequests);
+    const response = await fetchImpl(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -75,4 +121,43 @@ export async function requestAiRewrite({
     }
 
     return replacement;
+}
+
+export async function checkAiModelAvailability({
+    aiWriting,
+    relayAiRequests = false,
+    fetchImpl = fetch
+}: CheckAiModelAvailabilityOptions): Promise<AiModelAvailabilityResult> {
+    if (!aiWriting.baseUrl.trim() || !aiWriting.apiKey.trim() || !aiWriting.model.trim()) {
+        return { ok: false, message: '请先填写 BASE_URL、API_KEY 和 MODEL' };
+    }
+
+    try {
+        const baseUrl = getAiRequestBaseUrl(aiWriting.baseUrl, relayAiRequests);
+        const response = await fetchImpl(`${baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${aiWriting.apiKey}`
+            },
+            body: JSON.stringify({
+                model: aiWriting.model,
+                messages: [
+                    { role: 'system', content: 'Reply with ok.' },
+                    { role: 'user', content: 'ok' }
+                ],
+                temperature: 0,
+                max_tokens: 1,
+                stream: false
+            })
+        });
+
+        if (!response.ok) {
+            return { ok: false, message: `模型不可用：HTTP ${response.status}` };
+        }
+
+        return { ok: true, message: '模型可用' };
+    } catch (err) {
+        return { ok: false, message: err instanceof Error ? err.message : '模型检测失败' };
+    }
 }
