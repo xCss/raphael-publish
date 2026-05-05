@@ -1,3 +1,5 @@
+import { removeMarkdownImagesBySource } from './markdownImages';
+
 const DRAFT_IMAGE_REFERENCE_PREFIX = 'raphael-image://draft/';
 const DATABASE_NAME = 'raphael-publish:image-store:v1';
 const DATABASE_VERSION = 1;
@@ -115,7 +117,7 @@ function listDraftImageRecords(database: IDBDatabase, draftId: string) {
     });
 }
 
-export function collectDraftImageReferenceIds(markdown: string, draftId = 'default') {
+export function collectDraftImageReferenceIds(markdown: string, draftId: string) {
     const imageIds = new Set<string>();
     const referencePattern = /raphael-image:\/\/draft\/[^\s)"'<>]+/g;
     for (const match of markdown.matchAll(referencePattern)) {
@@ -125,20 +127,14 @@ export function collectDraftImageReferenceIds(markdown: string, draftId = 'defau
     return imageIds;
 }
 
-export function removeDraftImageReferencesFromMarkdown(markdown: string, draftId = 'default') {
-    const lines = markdown.split(/\r?\n/);
-    const filteredLines = lines.filter((line) => {
-        const match = line.match(/^!\[[^\]]*\]\((raphael-image:\/\/draft\/[^)\s]+)\)$/);
-        if (!match) return true;
-
-        const parts = getDraftImageReferenceParts(match[1]);
-        return parts?.draftId !== draftId;
+export function removeDraftImageReferencesFromMarkdown(markdown: string, draftId: string) {
+    return removeMarkdownImagesBySource(markdown, (source) => {
+        const parts = getDraftImageReferenceParts(source);
+        return parts?.draftId === draftId;
     });
-
-    return filteredLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd();
 }
 
-export async function persistDraftImage(file: File, draftId = 'default') {
+export async function persistDraftImage(file: File, draftId: string) {
     const imageId = `pasted-${Date.now()}-${crypto.randomUUID()}`;
     const now = Date.now();
     const database = await openImageDatabase();
@@ -169,7 +165,7 @@ export async function clearPersistedDraftImages() {
     }
 }
 
-export async function cleanupOrphanDraftImages(markdown: string, draftId = 'default') {
+export async function cleanupOrphanDraftImages(markdown: string, draftId: string) {
     const referencedImageIds = collectDraftImageReferenceIds(markdown, draftId);
     const database = await openImageDatabase();
     try {

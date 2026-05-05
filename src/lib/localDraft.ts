@@ -1,3 +1,5 @@
+import { removeMarkdownImagesBySource } from './markdownImages';
+
 export const MARKDOWN_DRAFT_STORAGE_KEY = 'raphael-publish:markdown-draft:v1';
 export const PREFERENCES_STORAGE_KEY = 'raphael-publish:preferences:v1';
 
@@ -36,8 +38,6 @@ export const DEFAULT_PREFERENCES: StoredPreferences = {
     }
 };
 
-const blobImageMarkdownPattern = /^!\[[^\]\n]*\]\(blob:[^)\n]+\)\n*/gm;
-
 function canUseStorage(storage: Storage | undefined): storage is Storage {
     return typeof storage !== 'undefined';
 }
@@ -57,7 +57,7 @@ export function saveMarkdownDraft(storage: Storage | undefined, draft: string) {
     if (!canUseStorage(storage)) return false;
 
     try {
-        const restorableDraft = draft.replace(blobImageMarkdownPattern, '').trimEnd();
+        const restorableDraft = removeMarkdownImagesBySource(draft, (source) => source.startsWith('blob:'));
         if (restorableDraft.trim().length === 0) {
             storage.removeItem(MARKDOWN_DRAFT_STORAGE_KEY);
             return true;

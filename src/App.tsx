@@ -16,7 +16,8 @@ import PreviewPanel from './components/PreviewPanel';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
 import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
-import { cleanupOrphanDraftImages, clearPersistedDraftImages, removeDraftImageReferencesFromMarkdown, resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
+import { clearPersistedDraftImages, resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
+import { cleanupCurrentDraftImages, removeCurrentDraftImageReferences } from './lib/currentDraftImages';
 import { checkAiModelAvailability, requestAiRewrite, type AiModelAvailabilityResult, type AiRewriteAction } from './lib/aiRewrite';
 import { prepareHtmlForExport } from './lib/htmlExport';
 import { createPdfExportContainer } from './lib/pdfExport';
@@ -32,6 +33,8 @@ export default function App() {
     const [activeTheme, setActiveTheme] = useState(preferences.activeTheme);
     const [copied, setCopied] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
+    const [isExportingPdf, setIsExportingPdf] = useState(false);
+    const [exportPdfError, setExportPdfError] = useState('');
     const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'pc'>(preferences.previewDevice);
     const [activePanel, setActivePanel] = useState<'editor' | 'preview'>('editor');
     const [scrollSyncEnabled, setScrollSyncEnabled] = useState(preferences.scrollSyncEnabled);
@@ -68,7 +71,7 @@ export default function App() {
         if (!persistPastedImages) return;
 
         const timeoutId = window.setTimeout(() => {
-            cleanupOrphanDraftImages(markdownInput).catch((err: unknown) => {
+            cleanupCurrentDraftImages(markdownInput).catch((err: unknown) => {
                 console.warn('Failed to cleanup orphan pasted images:', err);
             });
         }, 2000);
@@ -146,7 +149,7 @@ export default function App() {
         if (!shouldDisable) return;
 
         if (!keepImageReferencesOnDisable) {
-            setMarkdownInput((currentMarkdown) => removeDraftImageReferencesFromMarkdown(currentMarkdown));
+            setMarkdownInput((currentMarkdown) => removeCurrentDraftImageReferences(currentMarkdown));
         }
         setPersistPastedImages(false);
         clearPersistedDraftImages().catch((err: unknown) => {
@@ -314,7 +317,8 @@ export default function App() {
 
     const handleExportPdf = async () => {
         if (!previewRef.current) return;
-        const { default: html2pdf } = await import('html2pdf.js');
+        setIsExportingPdf(true);
+        setExportPdfError('');
         const element = previewRef.current;
         const backgroundColor = document.documentElement.classList.contains('dark') ? '#000000' : '#ffffff';
         const opt = {
@@ -324,14 +328,28 @@ export default function App() {
             html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor },
             jsPDF: { unit: 'mm' as const, format: 'a4', orientation: 'portrait' as const }
         };
-        const cloneContainer = createPdfExportContainer(element, backgroundColor);
 
-        document.body.appendChild(cloneContainer);
         try {
-            await html2pdf().set(opt).from(cloneContainer).save();
+            const { default: html2pdf } = await import('html2pdf.js');
+            const cloneContainer = createPdfExportContainer(element, backgroundColor);
+            document.body.appendChild(cloneContainer);
+            try {
+                await html2pdf().set(opt).from(cloneContainer).save();
+            } finally {
+                cloneContainer.remove();
+            }
+        } catch (err) {
+            console.error('PDF export failed', err);
+            setExportPdfError(err instanceof Error ? err.message : '导出 PDF 失败，请稍后重试');
         } finally {
-            cloneContainer.remove();
+            setIsExportingPdf(false);
         }
+    };
+
+    const preloadPdfExporter = () => {
+        import('html2pdf.js').catch((err: unknown) => {
+            console.warn('PDF exporter preload failed:', err);
+        });
     };
 
     const handleImageClick = useCallback((info: { type: string; index: number; src?: string; alt?: string; content?: string }) => {
@@ -446,6 +464,15 @@ export default function App() {
                     testId="ai-rewrite-toast"
                 />
             )}
+            {exportPdfError && (
+                <Toast
+                    message={exportPdfError}
+                    variant="error"
+                    onDismiss={() => setExportPdfError('')}
+                    dismissLabel="关闭 PDF 导出提示"
+                    testId="pdf-export-toast"
+                />
+            )}
 
             <SettingsPanel
                 open={isSettingsOpen}
@@ -491,10 +518,12 @@ export default function App() {
                     previewDevice={previewDevice}
                     onDeviceChange={setPreviewDevice}
                     onExportPdf={handleExportPdf}
+                    onPreloadPdfExporter={preloadPdfExporter}
                     onExportHtml={handleExportHtml}
                     onCopy={handleCopy}
                     copied={copied}
                     isCopying={isCopying}
+                    isExportingPdf={isExportingPdf}
                 />
             </div>
 
@@ -507,10 +536,12 @@ export default function App() {
                     previewDevice={previewDevice}
                     onDeviceChange={setPreviewDevice}
                     onExportPdf={handleExportPdf}
+                    onPreloadPdfExporter={preloadPdfExporter}
                     onExportHtml={handleExportHtml}
                     onCopy={handleCopy}
                     copied={copied}
                     isCopying={isCopying}
+                    isExportingPdf={isExportingPdf}
                 />
             </div>
 

@@ -5,13 +5,15 @@ interface ToolbarProps {
     previewDevice: 'mobile' | 'tablet' | 'pc';
     onDeviceChange: (device: 'mobile' | 'tablet' | 'pc') => void;
     onExportPdf: () => void;
+    onPreloadPdfExporter: () => void;
     onExportHtml: () => void;
     onCopy: () => void;
     copied: boolean;
     isCopying: boolean;
+    isExportingPdf: boolean;
 }
 
-export default function Toolbar({ previewDevice, onDeviceChange, onExportPdf, onExportHtml, onCopy, copied, isCopying }: ToolbarProps) {
+export default function Toolbar({ previewDevice, onDeviceChange, onExportPdf, onPreloadPdfExporter, onExportHtml, onCopy, copied, isCopying, isExportingPdf }: ToolbarProps) {
     return (
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 max-w-[1024px]">
             <div className="hidden md:flex bg-[#00000008] dark:bg-[#ffffff10] p-1 rounded-full backdrop-blur-md">
@@ -47,10 +49,13 @@ export default function Toolbar({ previewDevice, onDeviceChange, onExportPdf, on
                     whileTap={{ scale: 0.96 }}
                     data-testid="export-pdf"
                     onClick={onExportPdf}
-                    className="apple-export-btn !hidden sm:!flex !bg-[#00000008] dark:!bg-[#ffffff10] border-transparent"
+                    onMouseEnter={onPreloadPdfExporter}
+                    onFocus={onPreloadPdfExporter}
+                    disabled={isExportingPdf}
+                    className={`apple-export-btn !hidden sm:!flex !bg-[#00000008] dark:!bg-[#ffffff10] border-transparent ${isExportingPdf ? 'opacity-80 cursor-not-allowed' : ''}`}
                 >
-                    <Download size={14} />
-                    导出 PDF
+                    {isExportingPdf ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />}
+                    {isExportingPdf ? '正在导出...' : '导出 PDF'}
                 </motion.button>
 
                 <motion.button

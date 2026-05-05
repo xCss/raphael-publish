@@ -43,6 +43,7 @@ export default defineConfig({
             workbox: {
                 cleanupOutdatedCaches: true,
                 globPatterns: ['**/*.{js,css,html,svg,png,webp,ico}'],
+                globIgnores: ['**/html2pdf-*.js'],
                 navigateFallback: 'index.html'
             },
             devOptions: {
@@ -50,5 +51,20 @@ export default defineConfig({
             }
         })
     ],
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks(id) {
+                    if (!id.includes('node_modules')) return undefined;
+                    if (id.includes('html2pdf.js') || id.includes('html2canvas') || id.includes('jspdf')) return 'html2pdf';
+                    if (id.includes('markdown-it') || id.includes('highlight.js')) return 'markdown';
+                    if (id.includes('turndown')) return 'paste';
+                    if (id.includes('framer-motion') || id.includes('lucide-react')) return 'ui-vendor';
+                    if (id.includes('react') || id.includes('react-dom')) return 'react';
+                    return 'vendor';
+                }
+            }
+        }
+    },
     base: '/',
 })

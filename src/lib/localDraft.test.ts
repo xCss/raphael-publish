@@ -48,6 +48,50 @@ describe('local draft persistence', () => {
         expect(loadMarkdownDraft(localStorage, 'fallback')).toBe('# 草稿\n\n![远程图片](https://example.com/image.png)');
     });
 
+    test('removes inline non-restorable blob image references before saving drafts', () => {
+        localStorage.clear();
+
+        const draft = [
+            '# 草稿',
+            '',
+            '正文之前 ![临时截图](blob:http://localhost/pasted-inline) 正文之后',
+            '多个 ![临时 1](blob:http://localhost/pasted-one) 和 ![临时 2](blob:http://localhost/pasted-two "标题") 结束',
+            '',
+            '![远程图片](https://example.com/image.png)'
+        ].join('\n');
+
+        expect(saveMarkdownDraft(localStorage, draft)).toBe(true);
+        expect(loadMarkdownDraft(localStorage, 'fallback')).toBe([
+            '# 草稿',
+            '',
+            '正文之前 正文之后',
+            '多个 和 结束',
+            '',
+            '![远程图片](https://example.com/image.png)'
+        ].join('\n'));
+    });
+
+    test('does not collapse intentional markdown spacing when removing blob images', () => {
+        localStorage.clear();
+
+        const draft = [
+            '# 草稿',
+            '',
+            '    const value = 1;',
+            '保留  两个空格',
+            '正文 ![临时截图](blob:http://localhost/pasted-inline) 之后'
+        ].join('\n');
+
+        expect(saveMarkdownDraft(localStorage, draft)).toBe(true);
+        expect(loadMarkdownDraft(localStorage, 'fallback')).toBe([
+            '# 草稿',
+            '',
+            '    const value = 1;',
+            '保留  两个空格',
+            '正文 之后'
+        ].join('\n'));
+    });
+
     test('keeps durable local image references when saving drafts', () => {
         localStorage.clear();
 

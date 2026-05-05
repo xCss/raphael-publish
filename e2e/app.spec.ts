@@ -341,7 +341,7 @@ test('can remove local image references when disabling pasted image storage', as
     await page.goto('/');
 
     const editor = page.getByTestId('editor-input');
-    await editor.fill('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-test-image)\n\n正文');
+    await editor.fill('# 草稿\n\n![本地截图](raphael-image://draft/default/pasted-test-image)\n\n正文前 ![内联截图](raphael-image://draft/default/pasted-inline-image) 正文后');
 
     await page.getByTestId('settings-button').click();
 
@@ -360,7 +360,8 @@ test('can remove local image references when disabling pasted image storage', as
     await storageToggle.click();
     await expect(storageToggle).not.toBeChecked();
     await expect(editor).not.toHaveValue(/raphael-image:\/\/draft\/default\/pasted-test-image/);
-    await expect(editor).toHaveValue(/正文/);
+    await expect(editor).not.toHaveValue(/raphael-image:\/\/draft\/default\/pasted-inline-image/);
+    await expect(editor).toHaveValue(/正文前\s+正文后/);
 });
 
 test('saves and clears local AI writing configuration', async ({ page }) => {
@@ -380,7 +381,7 @@ test('saves and clears local AI writing configuration', async ({ page }) => {
     await page.getByTestId('settings-button').click();
 
     await expect(page.getByTestId('ai-base-url-input')).toHaveValue('https://api.example.com/v1');
-    await expect(page.getByTestId('ai-api-key-input')).toHaveValue('local-key');
+    await expect(page.getByTestId('ai-api-key-input')).toHaveValue('lo*****ey');
     await expect(page.getByTestId('ai-model-input')).toHaveValue('gpt-4o-mini');
     await expect(page.getByTestId('ai-config-warning')).toContainText('浏览器本地存储');
 
@@ -389,6 +390,28 @@ test('saves and clears local AI writing configuration', async ({ page }) => {
     await expect(page.getByTestId('ai-base-url-input')).toHaveValue('');
     await expect(page.getByTestId('ai-api-key-input')).toHaveValue('');
     await expect(page.getByTestId('ai-model-input')).toHaveValue('');
+});
+
+test('masks API key input and selects all text on focus for easy replacement', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await page.getByTestId('settings-button').click();
+    const apiKeyInput = page.getByTestId('ai-api-key-input');
+
+    await apiKeyInput.fill('sk-fjk1234567890basd');
+    await expect(apiKeyInput).toHaveValue('sk-fjk********basd');
+    await apiKeyInput.focus();
+
+    await expect.poll(async () => {
+        return page.evaluate(() => {
+            const input = document.querySelector('[data-testid="ai-api-key-input"]') as HTMLInputElement | null;
+            return input ? `${input.selectionStart}:${input.selectionEnd}:${input.value}` : '';
+        });
+    }).toBe('0:18:sk-fjk********basd');
+
+    await apiKeyInput.fill('sk-new-secret-value');
+    await expect(apiKeyInput).toHaveValue('sk-new********alue');
 });
 
 test('formats selected editor text from the floating AI menu', async ({ page }) => {

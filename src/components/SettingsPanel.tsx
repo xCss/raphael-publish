@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, CircleHelp, Loader2, X, XCircle } from "lucide-react";
 import type { AiModelAvailabilityResult } from "../lib/aiRewrite";
+import { maskSecretValue } from "../lib/secretMask";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -35,7 +36,7 @@ const sections = [
   },
   {
     title: "AI Writing",
-    description: "配置 BASE_URL、API_KEY 和 MODEL 后启用改写能力。",
+    description: "配置AI后启用改写能力。",
   },
 ];
 
@@ -92,6 +93,25 @@ export default function SettingsPanel({
         ? 'available'
         : 'unavailable';
   const aiModelStatusTitle = aiModelStatus === 'checking' ? '正在检测模型是否可用...' : aiModelAvailability.message;
+  const maskedApiKey = useMemo(() => maskSecretValue(aiWriting.apiKey), [aiWriting.apiKey]);
+  const handleAiApiKeyFocus = (event: FocusEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    window.requestAnimationFrame(() => {
+      input.setSelectionRange(0, input.value.length);
+    });
+  };
+  const handleAiApiKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
+    onAiWritingChange({
+      ...aiWriting,
+      apiKey: event.currentTarget.value,
+    });
+  };
+  const handleAiApiKeyKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    const isShortcut = event.ctrlKey || event.metaKey || event.altKey;
+    if (!isShortcut && event.key.length === 1) {
+      event.preventDefault();
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -176,7 +196,7 @@ export default function SettingsPanel({
                       滚动同步
                     </span>
                     <span className="mt-1 block text-[12px] leading-5 text-[#86868b] dark:text-[#a1a1a6]">
-                      编辑器与预览区会保持相近阅读位置，默认开启。
+                      编辑器与预览区会保持相近阅读位置。
                     </span>
                   </label>
                   <button
@@ -315,7 +335,7 @@ export default function SettingsPanel({
                               baseUrl: event.currentTarget.value,
                             })
                           }
-                          placeholder="https://api.example.com/v1"
+                          placeholder="https://api.openai.com/v1"
                           className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-[#1d1d1f] outline-none transition focus:border-[#0066cc] dark:border-white/10 dark:bg-[#1c1c1e] dark:text-[#f5f5f7]"
                         />
                       </label>
@@ -325,17 +345,17 @@ export default function SettingsPanel({
                         </span>
                         <input
                           data-testid="ai-api-key-input"
-                          type="password"
-                          value={aiWriting.apiKey}
-                          onChange={(event) =>
-                            onAiWritingChange({
-                              ...aiWriting,
-                              apiKey: event.currentTarget.value,
-                            })
-                          }
-                          placeholder="local-browser-key"
+                          autoComplete="off"
+                          value={maskedApiKey}
+                          onFocus={handleAiApiKeyFocus}
+                          onKeyDown={handleAiApiKeyKeyDown}
+                          onChange={handleAiApiKeyChange}
+                          placeholder="sk-abc******xyz"
                           className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-[#1d1d1f] outline-none transition focus:border-[#0066cc] dark:border-white/10 dark:bg-[#1c1c1e] dark:text-[#f5f5f7]"
                         />
+                        <span className="mt-1 block text-[12px] leading-5 text-[#86868b] dark:text-[#a1a1a6]">
+                          始终掩码显示；点击后会全选，修改时请直接粘贴覆盖。
+                        </span>
                       </label>
                       <label className="block">
                         <span className="mb-1 block text-[12px] font-semibold text-[#1d1d1f] dark:text-[#f5f5f7]">

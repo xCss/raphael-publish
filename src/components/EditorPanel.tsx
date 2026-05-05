@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Bot, FileText, PenLine, Sparkles, Wand2 } from 'lucide-react';
 import { handleSmartPaste } from '../lib/htmlToMarkdown';
-import { persistDraftImage } from '../lib/imagePersistence';
+import { persistCurrentDraftImage } from '../lib/currentDraftImages';
 import type { AiRewriteAction } from '../lib/aiRewrite';
 
 interface EditorPanelProps {
@@ -24,7 +24,7 @@ export default function EditorPanel({ markdownInput, onInputChange, editorScroll
     const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
         handleSmartPaste(e, onInputChange, {
             persistImages: persistPastedImages,
-            persistImage: persistPastedImages ? (file) => persistDraftImage(file) : undefined
+            persistImage: persistPastedImages ? (file) => persistCurrentDraftImage(file) : undefined
         });
     };
 

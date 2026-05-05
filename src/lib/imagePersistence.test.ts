@@ -87,4 +87,18 @@ describe('image persistence references', () => {
             '![其它草稿](raphael-image://draft/other/pasted-keep)'
         ].join('\n'));
     });
+
+    test('removes inline current draft image references without removing surrounding text', () => {
+        const markdown = [
+            '正文之前 ![本地截图](raphael-image://draft/default/pasted-inline) 正文之后',
+            '同一行 ![移除 1](raphael-image://draft/default/pasted-one) 和 ![移除 2](raphael-image://draft/default/pasted-two "标题") 结束',
+            '保留其它草稿 ![其它草稿](raphael-image://draft/other/pasted-keep) 和远程 ![远程](https://example.com/image.png)'
+        ].join('\n');
+
+        expect(removeDraftImageReferencesFromMarkdown(markdown, 'default')).toBe([
+            '正文之前 正文之后',
+            '同一行 和 结束',
+            '保留其它草稿 ![其它草稿](raphael-image://draft/other/pasted-keep) 和远程 ![远程](https://example.com/image.png)'
+        ].join('\n'));
+    });
 });
