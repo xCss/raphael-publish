@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { refreshServiceWorkerWithFallback } from '../lib/pwaRefresh';
 import Toast from './Toast';
 
 interface PwaStatusProps {
@@ -9,6 +10,7 @@ interface PwaStatusProps {
 export default function PwaStatus({ isOnline }: PwaStatusProps) {
     const [offlineToastDismissed, setOfflineToastDismissed] = useState(false);
     const [offlineReadyDismissed, setOfflineReadyDismissed] = useState(false);
+    const [isUpdating, setIsUpdating] = useState(false);
     const {
         offlineReady: [offlineReady, setOfflineReady],
         needRefresh: [needRefresh, setNeedRefresh],
@@ -59,7 +61,7 @@ export default function PwaStatus({ isOnline }: PwaStatusProps) {
     const message = showOffline
         ? '当前离线，可继续编辑本地草稿'
         : needRefresh
-            ? '新版本已准备好，刷新即可更新'
+            ? '新版本已准备好'
             : '已可离线使用';
 
     const dismiss = () => {
@@ -67,6 +69,23 @@ export default function PwaStatus({ isOnline }: PwaStatusProps) {
         if (offlineReady) setOfflineReadyDismissed(true);
         setOfflineReady(false);
         setNeedRefresh(false);
+    };
+
+    const refreshNow = () => {
+        if (isUpdating) return;
+
+        setIsUpdating(true);
+        const serviceWorker = typeof navigator !== 'undefined' && 'serviceWorker' in navigator
+            ? navigator.serviceWorker
+            : undefined;
+
+        void refreshServiceWorkerWithFallback({
+            updateServiceWorker,
+            serviceWorker,
+            reloadPage: () => window.location.reload()
+        }).catch((error: unknown) => {
+            console.warn('Service worker refresh failed', error);
+        });
     };
 
     const variant = showOffline ? 'offline' : needRefresh ? 'refresh' : 'success';
@@ -81,10 +100,12 @@ export default function PwaStatus({ isOnline }: PwaStatusProps) {
             action={needRefresh && (
                 <button
                     type="button"
-                    onClick={() => updateServiceWorker(true)}
-                    className="rounded-full bg-[#0066cc] px-3 py-1.5 text-[12px] text-white transition-colors hover:bg-[#0052a3] dark:bg-[#0a84ff] dark:hover:bg-[#0070d9]"
+                    onClick={refreshNow}
+                    disabled={isUpdating}
+                    aria-busy={isUpdating}
+                    className="rounded-full bg-[#0066cc] px-3 py-1.5 text-[12px] text-white transition-colors hover:bg-[#0052a3] disabled:cursor-wait disabled:opacity-70 dark:bg-[#0a84ff] dark:hover:bg-[#0070d9]"
                 >
-                    刷新
+                    {isUpdating ? '更新中...' : '刷新'}
                 </button>
             )}
         />
