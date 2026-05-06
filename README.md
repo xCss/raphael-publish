@@ -19,7 +19,7 @@
 
 ### AI 写作助手
 
-在「设置 → AI Writing」中填写 `BASE_URL`、`API_KEY` 和 `MODEL` 后，系统会自动检测模型是否可用。检测通过后，编辑器右上角会默认显示 AI 小机器人；有选区时处理选区，没有选区时处理整篇原文。
+在「设置 → AI Writing」中填写AI相关信息后，系统会自动检测模型是否可用。检测通过后，编辑器右上角会默认显示 AI 小机器人；有选区时处理选区，没有选区时处理整篇原文。
 
 - **格式化**：将粘贴后挤成一段的内容整理成公众号友好的 Markdown 结构。
 - **扩写**：在保留原意的前提下补充细节，让段落更完整。
@@ -73,6 +73,21 @@ API Key 仅保存在浏览器本地。默认开启「使用 [RELAYX](https://git
 ### 导出
 
 支持导出为 PDF 和 HTML 文件，适合存档、邮件发送或网页发布。
+
+### Agent 自动生成 HTML
+
+仓库内置 `raphael-html-generator` skill，可让 Codex/Agent 通过模板参数直接生成 Raphael Publish 风格 HTML，而不必打开所见即所得界面：
+
+- 这是**仓库内共享的 repo-local skill**，当前项目里的所有 agent 都可以直接使用
+- 默认适合公众号 / WeChat 排版，通常优先使用 `wechat` 主题
+
+```bash
+node skills/raphael-html-generator/scripts/generate-html.mjs \
+  --input article.json \
+  --output article.html
+```
+
+模板参数和主题 ID 见 `skills/raphael-html-generator/references/template-parameters.md`。
 
 ### 本地优先与 PWA
 

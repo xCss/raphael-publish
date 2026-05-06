@@ -12,7 +12,7 @@ playwright-report/
 test-results/
 
 # Agent/tool local state
-.codex*
+.codex/
 .omx/
 .claude
 .opencode

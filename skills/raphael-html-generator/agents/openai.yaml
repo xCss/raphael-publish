@@ -1,0 +1,4 @@
+interface:
+  display_name: "Raphael HTML Generator"
+  short_description: "Generate Raphael Publish themed HTML from template parameters."
+  default_prompt: "Generate a WeChat-ready HTML article from JSON template parameters."
