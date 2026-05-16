@@ -35,6 +35,56 @@ describe('requestAiRewrite', () => {
         expect(result).toBe('改写内容');
     });
 
+    test('asks expand and rewrite actions to preserve the author voice with restrained wording', async () => {
+        const requestBodies: Array<{
+            messages: Array<{ role: string; content: string }>;
+            temperature: number;
+            max_tokens: number;
+        }> = [];
+        const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+            requestBodies.push(JSON.parse(String(init?.body ?? '{}')));
+            return new Response(JSON.stringify({
+                choices: [{ message: { content: '处理后的内容' } }]
+            }), { status: 200 });
+        });
+
+        const aiWriting = {
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'local-key',
+            model: 'gpt-4o-mini'
+        };
+
+        await requestAiRewrite({
+            aiWriting,
+            action: 'expand',
+            selectedText: '原文内容',
+            context: '# 标题\n原文内容',
+            fetchImpl
+        });
+        await requestAiRewrite({
+            aiWriting,
+            action: 'rewrite',
+            selectedText: '原文内容',
+            context: '# 标题\n原文内容',
+            fetchImpl
+        });
+
+        const [expandBody, rewriteBody] = requestBodies;
+        const expandPayload = JSON.parse(expandBody.messages[1].content);
+        const rewritePayload = JSON.parse(rewriteBody.messages[1].content);
+
+        expect(expandBody.messages[0].content).toContain('像作者本人在修改自己的草稿');
+        expect(expandPayload.instruction).toContain('扩写量控制');
+        expect(expandPayload.instruction).toContain('不要把文章拔高');
+        expect(expandBody.temperature).toBe(0.45);
+        expect(expandBody.max_tokens).toBe(1600);
+
+        expect(rewritePayload.instruction).toContain('保留原文的信息密度和个性表达');
+        expect(rewritePayload.instruction).toContain('不要明显扩写');
+        expect(rewriteBody.temperature).toBe(0.35);
+        expect(rewriteBody.max_tokens).toBe(1200);
+    });
+
     test('fails before calling fetch when AI settings are incomplete', async () => {
         const fetchImpl = vi.fn();
 
