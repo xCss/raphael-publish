@@ -15,7 +15,8 @@ import EditorPanel from './components/EditorPanel';
 import PreviewPanel from './components/PreviewPanel';
 import SettingsPanel from './components/SettingsPanel';
 import Toast from './components/Toast';
-import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences } from './lib/localDraft';
+import Resizer from './components/Resizer';
+import { DEFAULT_PREFERENCES, loadMarkdownDraft, loadPreferences, saveMarkdownDraft, savePreferences, loadEditorWidth, saveEditorWidth } from './lib/localDraft';
 import { clearPersistedDraftImages, resolveDraftImageReferencesInHtml, resolveDraftImageReferenceToObjectUrl } from './lib/imagePersistence';
 import { cleanupCurrentDraftImages, removeCurrentDraftImageReferences } from './lib/currentDraftImages';
 import { checkAiModelAvailability, requestAiRewrite, type AiModelAvailabilityResult, type AiRewriteAction } from './lib/aiRewrite';
@@ -48,6 +49,7 @@ export default function App() {
     const [aiRewriteError, setAiRewriteError] = useState('');
     const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [editorWidth, setEditorWidth] = useState(() => loadEditorWidth(typeof window === 'undefined' ? undefined : window.localStorage));
     const previewRef = useRef<HTMLDivElement>(null);
     const editorScrollRef = useRef<HTMLTextAreaElement>(null);
     const previewOuterScrollRef = useRef<HTMLDivElement>(null);
@@ -437,16 +439,24 @@ export default function App() {
         void handleSelectionAiAction(action, effectiveRange);
     }, [handleSelectionAiAction, markdownInput]);
 
+    const handleResize = useCallback((deltaX: number) => {
+        setEditorWidth((prev) => {
+            const mainElement = document.querySelector('main');
+            if (!mainElement) return prev;
+            const containerWidth = mainElement.clientWidth;
+            const deltaPercent = (deltaX / containerWidth) * 100;
+            return Math.max(20, Math.min(80, prev + deltaPercent));
+        });
+    }, []);
+
+    const handleResizeEnd = useCallback(() => {
+        saveEditorWidth(window.localStorage, editorWidth);
+    }, [editorWidth]);
+
     const deviceWidthClass = () => {
         if (previewDevice === 'mobile') return 'w-[520px] max-w-full';
         if (previewDevice === 'tablet') return 'w-[800px] max-w-full';
         return 'w-[840px] xl:w-[1024px] max-w-[95%]';
-    };
-
-    const gridLayoutClass = () => {
-        if (previewDevice === 'mobile') return 'md:grid-cols-[55fr_45fr]';
-        if (previewDevice === 'tablet') return 'md:grid-cols-[45fr_55fr]';
-        return 'md:grid-cols-[38.2fr_61.8fr]';
     };
 
     return (
@@ -512,19 +522,24 @@ export default function App() {
             </div>
 
             {/* 排版设置 & 工具栏 (桌面端) */}
-            <div className={`glass-toolbar hidden md:grid grid-cols-1 ${gridLayoutClass()} px-0 z-[90] transition-all duration-500`}>
-                <ThemeSelector activeTheme={activeTheme} onThemeChange={setActiveTheme} />
-                <Toolbar
-                    previewDevice={previewDevice}
-                    onDeviceChange={setPreviewDevice}
-                    onExportPdf={handleExportPdf}
-                    onPreloadPdfExporter={preloadPdfExporter}
-                    onExportHtml={handleExportHtml}
-                    onCopy={handleCopy}
-                    copied={copied}
-                    isCopying={isCopying}
-                    isExportingPdf={isExportingPdf}
-                />
+            <div className="glass-toolbar hidden md:flex px-0 z-[90] transition-all duration-500">
+                <div style={{ width: `${editorWidth}%` }}>
+                    <ThemeSelector activeTheme={activeTheme} onThemeChange={setActiveTheme} />
+                </div>
+                <div className="w-[8px]" />
+                <div style={{ width: `${100 - editorWidth}%` }}>
+                    <Toolbar
+                        previewDevice={previewDevice}
+                        onDeviceChange={setPreviewDevice}
+                        onExportPdf={handleExportPdf}
+                        onPreloadPdfExporter={preloadPdfExporter}
+                        onExportHtml={handleExportHtml}
+                        onCopy={handleCopy}
+                        copied={copied}
+                        isCopying={isCopying}
+                        isExportingPdf={isExportingPdf}
+                    />
+                </div>
             </div>
 
             {/* 移动端工具栏：分两行避免按钮被主题栏挤出可视区 */}
@@ -546,8 +561,11 @@ export default function App() {
             </div>
 
             {/* 编辑区 & 预览区 */}
-            <main className={`flex-1 overflow-hidden grid grid-cols-1 ${gridLayoutClass()} relative transition-all duration-500`}>
-                <div className={`${activePanel === 'editor' ? 'flex' : 'hidden'} md:flex flex-col overflow-hidden`}>
+            <main className="flex-1 overflow-hidden flex relative transition-all duration-500">
+                <div
+                    className={`${activePanel === 'editor' ? 'flex' : 'hidden'} md:flex flex-col overflow-hidden`}
+                    style={{ width: `calc(${editorWidth}% - 4px)` }}
+                >
                     <EditorPanel
                         markdownInput={markdownInput}
                         onInputChange={setMarkdownInput}
@@ -560,7 +578,11 @@ export default function App() {
                         onAiSelectionAction={handleEditorAiAction}
                     />
                 </div>
-                <div className={`${activePanel === 'preview' ? 'flex' : 'hidden'} md:flex flex-col overflow-hidden`}>
+                <Resizer onResize={handleResize} onResizeEnd={handleResizeEnd} />
+                <div
+                    className={`${activePanel === 'preview' ? 'flex' : 'hidden'} md:flex flex-col overflow-hidden`}
+                    style={{ width: `calc(${100 - editorWidth}% - 4px)` }}
+                >
                     <PreviewPanel
                         renderedHtml={renderedHtml}
                         deviceWidthClass={deviceWidthClass()}

@@ -2,6 +2,7 @@ import { removeMarkdownImagesBySource } from './markdownImages';
 
 export const MARKDOWN_DRAFT_STORAGE_KEY = 'raphael-publish:markdown-draft:v1';
 export const PREFERENCES_STORAGE_KEY = 'raphael-publish:preferences:v1';
+export const EDITOR_WIDTH_STORAGE_KEY = 'raphael-publish:editor-width:v1';
 
 export type ThemeMode = 'light' | 'dark';
 export type PreviewDevice = 'mobile' | 'tablet' | 'pc';
@@ -125,6 +126,31 @@ export function savePreferences(storage: Storage | undefined, preferences: Store
 
     try {
         storage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(preferences));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export function loadEditorWidth(storage: Storage | undefined, fallback: number = 45): number {
+    if (!canUseStorage(storage)) return fallback;
+
+    try {
+        const rawValue = storage.getItem(EDITOR_WIDTH_STORAGE_KEY);
+        if (rawValue === null) return fallback;
+        const parsed = parseFloat(rawValue);
+        if (isNaN(parsed) || parsed < 20 || parsed > 80) return fallback;
+        return parsed;
+    } catch {
+        return fallback;
+    }
+}
+
+export function saveEditorWidth(storage: Storage | undefined, width: number) {
+    if (!canUseStorage(storage)) return false;
+
+    try {
+        storage.setItem(EDITOR_WIDTH_STORAGE_KEY, width.toString());
         return true;
     } catch {
         return false;

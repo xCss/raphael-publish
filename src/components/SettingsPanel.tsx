@@ -354,7 +354,7 @@ export default function SettingsPanel({
                           className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-[#1d1d1f] outline-none transition focus:border-[#0066cc] dark:border-white/10 dark:bg-[#1c1c1e] dark:text-[#f5f5f7]"
                         />
                         <span className="mt-1 block text-[12px] leading-5 text-[#86868b] dark:text-[#a1a1a6]">
-                          始终掩码显示；点击后会全选，修改时请直接粘贴覆盖。
+                          修改时请直接粘贴覆盖。
                         </span>
                       </label>
                       <label className="block">
