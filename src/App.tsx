@@ -456,7 +456,7 @@ export default function App() {
     const deviceWidthClass = () => {
         if (previewDevice === 'mobile') return 'w-[520px] max-w-full';
         if (previewDevice === 'tablet') return 'w-[800px] max-w-full';
-        return 'w-[840px] xl:w-[1024px] max-w-[95%]';
+        return 'w-full max-w-[1400px]';
     };
 
     return (
